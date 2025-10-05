@@ -1,0 +1,76 @@
+{
+  "title": "Railway npm ci fails - missing package-lock.json",
+  "description": "Dockerfile uses 'npm ci --only=production' but package-lock.json is gitignored, causing build failure",
+  "category": "build",
+  "component": "infra",
+  "tags": ["railway", "npm", "package-lock", "docker", "build"],
+  "package_manager": "npm",
+  "signatures": [
+    {
+      "text": "npm ci command can only install with an existing package-lock.json",
+      "regexes": [
+        "npm ci.*can only install",
+        "package-lock\\.json.*npm-shrinkwrap\\.json",
+        "lockfileVersion.*>= 1"
+      ],
+      "meta": {
+        "error_phase": "build",
+        "dockerfile_line": "RUN npm ci",
+        "min_score": 0.85
+      }
+    },
+    {
+      "text": "npm error code EUSAGE npm error The npm ci command",
+      "regexes": [
+        "npm error code EUSAGE",
+        "npm ci"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step_order": 1,
+      "kind": "cmd",
+      "payload": {
+        "command": "grep -n 'package-lock.json' .gitignore"
+      },
+      "description": "Check if package-lock.json is being ignored",
+      "timeout_ms": 5000
+    },
+    {
+      "step_order": 2,
+      "kind": "patch",
+      "payload": {
+        "file": ".gitignore",
+        "search": "mcp-servers/*/package-lock.json",
+        "replace": "# Package lock files should be committed for reproducible builds",
+        "description": "Remove package-lock.json from .gitignore"
+      },
+      "description": "Allow package-lock.json to be tracked in git",
+      "timeout_ms": 5000
+    },
+    {
+      "step_order": 3,
+      "kind": "cmd",
+      "payload": {
+        "command": "git add -f package-lock.json && git commit -m 'fix: Add package-lock.json for Railway npm ci build' && git push"
+      },
+      "description": "Force add package-lock.json and push to trigger Railway rebuild",
+      "timeout_ms": 30000
+    }
+  ],
+  "checks": [
+    {
+      "check_order": 1,
+      "cmd": "git ls-files package-lock.json",
+      "expect_substring": "package-lock.json",
+      "timeout_ms": 5000
+    },
+    {
+      "check_order": 2,
+      "cmd": "test -f package-lock.json && echo 'exists'",
+      "expect_substring": "exists",
+      "timeout_ms": 5000
+    }
+  ]
+}

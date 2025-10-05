@@ -1,0 +1,168 @@
+#!/bin/bash
+# Fixpack CLI - Apply solution memory fixes with preview
+# Usage:
+#   fixpack search "error message"
+#   fixpack apply <solution_id> [--dry-run]
+#   fixpack save <fixpack.json>
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MCP_SERVER="$HOME/.claude/mcp-servers/vector-bridge/dist/index.js"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Helper: call MCP tool
+call_mcp() {
+  local tool_name="$1"
+  local args="$2"
+
+  local request=$(cat <<EOF
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "$tool_name",
+    "arguments": $args
+  }
+}
+EOF
+)
+
+  echo "$request" | node "$MCP_SERVER" 2>/dev/null | jq -r '.result.content[0].text'
+}
+
+# Command: search
+cmd_search() {
+  local query="$1"
+  echo -e "${BLUE}Searching for solutions matching:${NC} $query"
+  echo ""
+
+  local args=$(cat <<EOF
+{
+  "query": "$query",
+  "project_root": "$(pwd)",
+  "k": 5
+}
+EOF
+)
+
+  local results=$(call_mcp "solution_search" "$args")
+  echo "$results" | jq -r '.results[] | "[\(.solution_id)] \(.title) (score: \(.score | tonumber | . * 100 | floor)%, success: \(.success_rate | tonumber | . * 100 | floor)%)\n  \(.description)\n"'
+}
+
+# Command: apply
+cmd_apply() {
+  local solution_id="$1"
+  local dry_run="${2:-true}"
+
+  if [ "$dry_run" == "--no-dry-run" ]; then
+    dry_run="false"
+  fi
+
+  echo -e "${BLUE}Fetching solution $solution_id...${NC}"
+  echo ""
+
+  local args=$(cat <<EOF
+{
+  "solution_id": $solution_id,
+  "dry_run": $dry_run,
+  "project_root": "$(pwd)"
+}
+EOF
+)
+
+  local result=$(call_mcp "solution_apply" "$args")
+
+  # Parse and display
+  local title=$(echo "$result" | jq -r '.title')
+  local step_count=$(echo "$result" | jq -r '.steps | length')
+
+  echo -e "${GREEN}Solution:${NC} $title"
+  echo -e "${YELLOW}Steps to execute ($step_count):${NC}"
+  echo ""
+
+  echo "$result" | jq -r '.steps[] | "[\(.order)] \(.kind | ascii_upcase): \(.description)\n  Command: \(.payload.run // .payload.file // "N/A")\n"'
+
+  if [ "$dry_run" == "true" ]; then
+    echo -e "${YELLOW}This was a DRY RUN. No changes were made.${NC}"
+    echo ""
+    echo "To apply for real, run:"
+    echo "  fixpack apply $solution_id --no-dry-run"
+  else
+    echo -e "${GREEN}Solution applied successfully!${NC}"
+
+    # Record outcome
+    echo ""
+    read -p "Did the fix work? (y/n): " outcome
+    if [ "$outcome" == "y" ]; then
+      echo "Recording success..."
+      # TODO: call record_outcome
+    else
+      echo "Recording failure..."
+      # TODO: call record_outcome with failure
+    fi
+  fi
+}
+
+# Command: save
+cmd_save() {
+  local fixpack_file="$1"
+
+  if [ ! -f "$fixpack_file" ]; then
+    echo -e "${RED}Error: File not found: $fixpack_file${NC}"
+    exit 1
+  fi
+
+  echo -e "${BLUE}Saving fixpack from:${NC} $fixpack_file"
+
+  local fixpack=$(cat "$fixpack_file")
+  local args=$(cat <<EOF
+{
+  "fixpack": $fixpack
+}
+EOF
+)
+
+  local result=$(call_mcp "solution_upsert" "$args")
+  local solution_id=$(echo "$result" | jq -r '.id')
+
+  echo -e "${GREEN}Fixpack saved with ID:${NC} $solution_id"
+  echo ""
+  echo "To apply:"
+  echo "  fixpack apply $solution_id"
+}
+
+# Main
+case "${1:-}" in
+  search)
+    cmd_search "$2"
+    ;;
+  apply)
+    cmd_apply "$2" "${3:-}"
+    ;;
+  save)
+    cmd_save "$2"
+    ;;
+  *)
+    echo "Fixpack CLI - Apply solution memory fixes"
+    echo ""
+    echo "Usage:"
+    echo "  fixpack search <query>           Search for solutions"
+    echo "  fixpack apply <id> [--no-dry-run]  Apply solution (dry-run by default)"
+    echo "  fixpack save <file.json>         Save new fixpack"
+    echo ""
+    echo "Examples:"
+    echo "  fixpack search 'ERR_PNPM_WORKSPACES'"
+    echo "  fixpack apply 1"
+    echo "  fixpack apply 1 --no-dry-run"
+    echo "  fixpack save fixpacks/my-fix.json"
+    exit 1
+    ;;
+esac

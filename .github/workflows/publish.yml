@@ -1,0 +1,90 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags (e.g., v1.0.0)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package.json version matches tag
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+
+          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "❌ Version mismatch!"
+            echo "  Git tag: v$TAG_VERSION"
+            echo "  package.json: $PACKAGE_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Version verified: $PACKAGE_VERSION"
+
+      - name: Check if version already published
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+
+          if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
+            echo "❌ Version $VERSION already published to npm"
+            exit 1
+          fi
+
+          echo "✅ Version $VERSION is new"
+
+      - name: Verify no credentials in package
+        run: |
+          echo "Checking for sensitive files..."
+
+          # This will fail if any .env files are found
+          if find . -name ".env" -not -path "./node_modules/*" -not -path "./.git/*" | grep -q .; then
+            echo "❌ Found .env files in package!"
+            find . -name ".env" -not -path "./node_modules/*" -not -path "./.git/*"
+            exit 1
+          fi
+
+          echo "✅ No credentials found"
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            ## Claude Agents Framework ${{ github.ref }}
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+            ### Installation
+            ```bash
+            npm install -g claude-agents
+            ```
+
+            ### What's Included
+            - 30+ specialized agents
+            - 39 production hooks
+            - 13 MCP servers
+            - Vector RAG memory support
+            - Interactive installer
+          draft: false
+          prerelease: false

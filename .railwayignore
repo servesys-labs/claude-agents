@@ -1,0 +1,6 @@
+# Ignore root Docker files - these are for local dev only
+# Railway should use mcp-servers/vector-bridge/Dockerfile instead
+Dockerfile
+docker-compose.yml
+custom-entrypoint.sh
+init.sql

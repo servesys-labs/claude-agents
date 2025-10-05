@@ -1,0 +1,11 @@
+# hooks/.npmignore
+# Exclude development files and runtime artifacts
+
+# Runtime directories (created by hooks for users)
+.claude/
+__pycache__/
+
+# Development utilities
+diagnose_stop_hook.sh
+test_hooks.py
+package.sh

@@ -1,0 +1,68 @@
+{
+  "title": "Railway Redis connection fails - ENOTFOUND redis.railway.internal (IPv6 DNS issue)",
+  "description": "ioredis cannot resolve redis.railway.internal hostname because Railway uses IPv6-only private network but ioredis defaults to IPv4 lookups",
+  "category": "runtime",
+  "component": "infra",
+  "tags": ["railway", "redis", "ioredis", "ipv6", "dns", "private-network"],
+  "package_manager": "npm",
+  "signatures": [
+    {
+      "text": "getaddrinfo ENOTFOUND redis.railway.internal",
+      "regexes": [
+        "getaddrinfo ENOTFOUND redis\\.railway\\.internal",
+        "Redis.*Connection error",
+        "ioredis"
+      ],
+      "meta": {
+        "error_phase": "runtime",
+        "service": "redis",
+        "platform": "railway",
+        "min_score": 0.95
+      }
+    },
+    {
+      "text": "Redis Connection error ENOTFOUND railway internal network",
+      "regexes": [
+        "ENOTFOUND.*\\.railway\\.internal",
+        "Redis"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step_order": 1,
+      "kind": "patch",
+      "payload": {
+        "file": "src/services/redis-cache.service.ts",
+        "search": "const options: RedisOptions = {\\n      retryStrategy:",
+        "replace": "const options: RedisOptions = {\\n      family: 0, // Enable dual-stack (IPv4 + IPv6) lookup for Railway compatibility\\n      retryStrategy:",
+        "description": "Add family: 0 to RedisOptions"
+      },
+      "description": "Set family=0 in ioredis options to enable dual-stack (IPv4+IPv6) DNS lookup",
+      "timeout_ms": 5000
+    },
+    {
+      "step_order": 2,
+      "kind": "cmd",
+      "payload": {
+        "command": "git add src/services/redis-cache.service.ts && git commit -m 'fix: Add family=0 to Redis connection for Railway IPv6 support' && git push"
+      },
+      "description": "Commit and push fix to trigger Railway redeploy",
+      "timeout_ms": 30000
+    }
+  ],
+  "checks": [
+    {
+      "check_order": 1,
+      "cmd": "grep -q 'family.*0' src/services/redis-cache.service.ts && echo 'family-option-added'",
+      "expect_substring": "family-option-added",
+      "timeout_ms": 5000
+    },
+    {
+      "check_order": 2,
+      "cmd": "curl -s [RAILWAY_SERVICE_URL]/health 2>&1 | grep -i 'redis.*connected'",
+      "expect_substring": "Redis connected",
+      "timeout_ms": 10000
+    }
+  ]
+}

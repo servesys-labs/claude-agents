@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "vector-bridge": {
+      "command": "node",
+      "args": ["/Users/agentsy/.claude/mcp-servers/vector-bridge/dist/index.js"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL_MEMORY}",
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}

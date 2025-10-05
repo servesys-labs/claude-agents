@@ -1,0 +1,105 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Build outputs
+**/dist/
+*.js.map
+*.d.ts.map
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+# Logs
+logs/
+*.log
+**/*.log
+# Environment variables (sensitive)
+.env
+.env.local
+**/.env
+# API keys and secrets (should use env vars)
+**/secrets/
+*.key
+*.pem
+# OS files
+.DS_Store
+Thumbs.db
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.history/
+# Temporary files
+tmp/
+temp/
+*.tmp
+# Database files (local only)
+*.db
+*.sqlite
+*.sqlite3
+# Compiled Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+# MCP server specific
+# Test artifacts and test files
+coverage/
+.nyc_output/
+test-*.ts
+test-*.js
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+**test-*.ts
+**test-*.js
+# Keep structure but ignore generated content
+projects/*/transcripts/
+projects/*/cache/
+# Claude Code session transcripts (can be 100MB+)
+# These are project-specific conversation logs
+projects/
+# File history (conversation snapshots - also can be large)
+file-history/
+history.jsonl
+# Shell snapshots and todos (generated session data)
+shell-snapshots/
+todos/
+# Backup files
+*.bak
+# IDE lock files
+ide/
+
+# Claude orchestration framework - Runtime directories (user-specific, not source code)
+.claude/
+**/.claude/
+statsig/
+ingest-queue/
+.envrc
+
+# Development files not needed in source control
+COMPACTION.md
+NOTES.md
+MCP_TEST_REPORT.md
+POSTGRES_BRIDGE_HARDENING.md
+TEXT_TO_SQL_README.md
+TEXT_TO_SQL_SUMMARY.md
+PHASE*.md
+SPRINT_PLAN.md
+CATEGORIZATION.md
+NEXT_SESSION.md
+PERIODIC_RUNNER_SETUP.md
+QUEUE_CLI_REFERENCE.md
+compaction-summary.json
+test-*.md
+test-*.sh
+
+# Claude Code infrastructure (auto-generated)
+plugins/
+output-styles/
+
+# Local development Docker files
+Dockerfile.local-dev
+docker-compose.local-dev.yml
+custom-entrypoint.local-dev.sh

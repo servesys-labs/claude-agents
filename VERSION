@@ -1,0 +1,4 @@
+VERSION=1.4.4
+DATE=2025-10-05
+COMPONENTS=hooks,agents,mcp-servers,config
+CHANGELOG=Fix NOTES.md path and add env variable injection to hooks

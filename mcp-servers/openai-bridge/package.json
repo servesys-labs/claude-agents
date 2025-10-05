@@ -1,0 +1,19 @@
+{
+  "name": "openai-bridge",
+  "version": "1.0.0",
+  "description": "MCP server to bridge Claude Code with OpenAI GPT-5",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "openai": "^4.70.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "claude-agents",
+  "version": "1.0.0",
+  "description": "Production-ready orchestration framework for Claude Desktop with 30+ specialized agents, smart hooks, vector memory, and autonomous workflows",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "claude",
+    "orchestration",
+    "ai",
+    "agents",
+    "automation",
+    "hooks",
+    "claude-desktop",
+    "mcp",
+    "subagents",
+    "framework",
+    "vector-memory",
+    "pgvector",
+    "postgres",
+    "redis",
+    "rag"
+  ],
+  "author": "ServeSys Labs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/servesys-labs/claude-agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/servesys-labs/claude-agents/issues"
+  },
+  "homepage": "https://github.com/servesys-labs/claude-agents#readme",
+  "files": [
+    "hooks",
+    "agents",
+    "config",
+    "mcp-servers",
+    "settings.json",
+    "install.sh",
+    "install.ps1",
+    "smoke-test.sh",
+    "README.md",
+    "QUICK_START.md",
+    "CLAUDE.md",
+    "CHANGELOG.md",
+    "LOGS_MIGRATION.md",
+    "INSTALLATION_VALIDATION.md",
+    ".gitignore",
+    "VERSION"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}

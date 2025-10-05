@@ -1,0 +1,67 @@
+{
+  "title": "Railway TypeScript build fails - tsc not found (missing dev dependencies)",
+  "description": "Dockerfile runs 'npm ci --only=production' which excludes TypeScript compiler, then fails on 'npm run build' with 'tsc: not found'",
+  "category": "build",
+  "component": "infra",
+  "tags": ["railway", "typescript", "docker", "multistage-build", "devdeps"],
+  "package_manager": "npm",
+  "signatures": [
+    {
+      "text": "sh: tsc: not found npm run build",
+      "regexes": [
+        "tsc: not found",
+        "npm run build",
+        "exit code: 127"
+      ],
+      "meta": {
+        "error_phase": "build",
+        "dockerfile_command": "RUN npm run build",
+        "min_score": 0.9
+      }
+    },
+    {
+      "text": "RUN npm ci --only=production then RUN npm run build fails",
+      "regexes": [
+        "npm ci --only=production",
+        "tsc.*not found"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step_order": 1,
+      "kind": "patch",
+      "payload": {
+        "file": "Dockerfile",
+        "search": "FROM node:20-alpine\\n\\nWORKDIR /app\\n\\n# Install dependencies\\nCOPY package*.json ./\\nRUN npm ci --only=production\\n\\n# Copy source code\\nCOPY . .\\n\\n# Build TypeScript\\nRUN npm run build",
+        "replace": "FROM node:20-alpine AS builder\\n\\nWORKDIR /app\\n\\n# Install ALL dependencies (including dev deps for build)\\nCOPY package*.json ./\\nRUN npm ci\\n\\n# Copy source code\\nCOPY . .\\n\\n# Build TypeScript\\nRUN npm run build\\n\\n# Production stage - smaller image without dev deps\\nFROM node:20-alpine\\n\\nWORKDIR /app\\n\\n# Copy package files and install only production deps\\nCOPY package*.json ./\\nRUN npm ci --only=production\\n\\n# Copy built artifacts from builder\\nCOPY --from=builder /app/dist ./dist",
+        "description": "Convert to multi-stage Docker build"
+      },
+      "description": "Use multi-stage build: Stage 1 compiles TypeScript with all deps, Stage 2 runs with production deps only",
+      "timeout_ms": 10000
+    },
+    {
+      "step_order": 2,
+      "kind": "cmd",
+      "payload": {
+        "command": "git add Dockerfile && git commit -m 'fix: Use multi-stage Docker build for TypeScript compilation' && git push"
+      },
+      "description": "Commit and push multi-stage Dockerfile to trigger Railway rebuild",
+      "timeout_ms": 30000
+    }
+  ],
+  "checks": [
+    {
+      "check_order": 1,
+      "cmd": "grep -q 'FROM.*AS builder' Dockerfile && echo 'multistage'",
+      "expect_substring": "multistage",
+      "timeout_ms": 5000
+    },
+    {
+      "check_order": 2,
+      "cmd": "grep -q 'COPY --from=builder' Dockerfile && echo 'artifacts-copied'",
+      "expect_substring": "artifacts-copied",
+      "timeout_ms": 5000
+    }
+  ]
+}

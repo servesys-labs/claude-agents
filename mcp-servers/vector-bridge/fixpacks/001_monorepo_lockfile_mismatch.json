@@ -1,0 +1,73 @@
+{
+  "title": "Monorepo build fix — mismatched workspace and lockfile",
+  "description": "Fixes ERR_PNPM_WORKSPACES when lockfile doesn't match package manager. Common in monorepos using pnpm with leftover npm lockfiles.",
+  "category": "workspace",
+  "component": "infra",
+  "tags": ["pnpm", "monorepo", "lockfile", "workspace"],
+  "package_manager": "pnpm",
+  "monorepo_tool": "turbo",
+  "signatures": [
+    {
+      "text": "ERR_PNPM_WORKSPACES: workspaces detected but npm lockfile present",
+      "regexes": [
+        "ERR_PNPM_WORKSPACES",
+        "Detected monorepo but.*lockfile present",
+        "workspace.*lockfile mismatch"
+      ]
+    },
+    {
+      "text": "Build failed: no matching workspace found",
+      "regexes": [
+        "no matching workspace",
+        "workspace.*not found",
+        "ERR_PNPM_NO_MATCHING_VERSION_INSIDE_WORKSPACE"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "kind": "cmd",
+      "payload": {
+        "run": "rm -f package-lock.json yarn.lock",
+        "cwd": "{project_root}"
+      },
+      "description": "Remove conflicting lockfiles"
+    },
+    {
+      "kind": "cmd",
+      "payload": {
+        "run": "pnpm install",
+        "cwd": "{project_root}"
+      },
+      "description": "Reinstall with pnpm"
+    },
+    {
+      "kind": "patch",
+      "payload": {
+        "file": "package.json",
+        "diff": "--- a/package.json\n+++ b/package.json\n@@ -1,5 +1,6 @@\n {\n   \"name\": \"my-monorepo\",\n+  \"packageManager\": \"pnpm@9.0.0\",\n   \"private\": true,\n   \"workspaces\": [\n     \"packages/*\"\n"
+      },
+      "description": "Add packageManager field to package.json"
+    },
+    {
+      "kind": "cmd",
+      "payload": {
+        "run": "pnpm build",
+        "cwd": "{project_root}"
+      },
+      "description": "Rebuild with pnpm"
+    }
+  ],
+  "checks": [
+    {
+      "cmd": "test -f pnpm-lock.yaml",
+      "expect_exit_code": 0,
+      "timeout_ms": 5000
+    },
+    {
+      "cmd": "pnpm build",
+      "expect_substring": "Build completed",
+      "timeout_ms": 120000
+    }
+  ]
+}

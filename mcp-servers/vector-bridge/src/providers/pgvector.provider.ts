@@ -1,0 +1,376 @@
+/**
+ * PgVectorProvider - Postgres + pgvector implementation of MemoryProvider
+ */
+
+import pg from 'pg';
+import crypto from 'crypto';
+import {
+  MemoryProvider,
+  MemoryChunk,
+  IngestResult,
+  SearchResult,
+  ProjectInfo,
+} from './memory-provider.interface.js';
+import { EmbeddingService } from '../services/embedding.service.js';
+import { ChunkingService } from '../services/chunking.service.js';
+import { CategoryInferenceService } from '../services/category-inference.service.js';
+import { RedisCacheService } from '../services/redis-cache.service.js';
+
+const { Pool } = pg;
+
+export class PgVectorProvider implements MemoryProvider {
+  private pool: pg.Pool;
+  private embedding: EmbeddingService;
+  private chunking: ChunkingService;
+  private categoryInference: CategoryInferenceService;
+  private cache?: RedisCacheService;
+
+  constructor(databaseUrl?: string, redisUrl?: string) {
+    this.pool = new Pool({
+      connectionString: databaseUrl || process.env.DATABASE_URL,
+    });
+
+    // Initialize Redis cache if URL provided
+    if (redisUrl || process.env.REDIS_URL) {
+      this.cache = new RedisCacheService(redisUrl);
+      console.log('[PgVectorProvider] Redis cache enabled');
+    } else {
+      console.warn('[PgVectorProvider] No Redis URL provided, running without cache');
+    }
+
+    // Note: EmbeddingService will be created per-project to track token usage
+    this.embedding = new EmbeddingService(undefined, undefined, this.cache);
+    this.chunking = new ChunkingService();
+    this.categoryInference = new CategoryInferenceService();
+  }
+
+  /**
+   * Generate SHA256 hash of text for deduplication
+   */
+  private hashContent(text: string): string {
+    return crypto.createHash('sha256').update(text).digest('hex');
+  }
+
+  /**
+   * Get or create project by root_path
+   */
+  private async getOrCreateProject(
+    project_root: string
+  ): Promise<number> {
+    const result = await this.pool.query(
+      'SELECT get_or_create_project($1, $2) as id',
+      [project_root, project_root.split('/').pop() || project_root]
+    );
+    return result.rows[0].id;
+  }
+
+  /**
+   * Ingest text content into vector store
+   */
+  async ingest(
+    project_root: string,
+    path: string,
+    text: string,
+    meta?: Record<string, any>
+  ): Promise<IngestResult> {
+    // Get or create project
+    const project_id = await this.getOrCreateProject(project_root);
+    const repo_name = project_root.split('/').pop() || project_root;
+
+    // Infer metadata (allow override via meta)
+    const component = meta?.component || this.categoryInference.inferComponent(path);
+    const category = meta?.category || this.categoryInference.inferCategory(path, text);
+    const tags = meta?.tags || this.categoryInference.extractTags(text);
+
+    // Chunk the text
+    const { chunks } = this.chunking.chunk(text);
+
+    if (chunks.length === 0) {
+      return { chunks: 0, project_id };
+    }
+
+    // Check dedupe for each chunk (if cache available)
+    const deduplicatedChunks: string[] = [];
+    const chunkShas: string[] = [];
+
+    for (const chunk of chunks) {
+      const chunkSha = this.hashContent(chunk);
+
+      // Check if this chunk was recently ingested
+      if (this.cache) {
+        const isDuplicate = await this.cache.checkDedupe(project_id.toString(), chunkSha);
+        if (isDuplicate) {
+          console.log(`[Dedupe] Skipping duplicate chunk: ${chunk.substring(0, 50)}...`);
+          continue;
+        }
+      }
+
+      deduplicatedChunks.push(chunk);
+      chunkShas.push(chunkSha);
+    }
+
+    if (deduplicatedChunks.length === 0) {
+      console.log('[Dedupe] All chunks were duplicates, skipping ingestion');
+      return { chunks: 0, project_id };
+    }
+
+    console.log(
+      `[Ingest] Processing ${deduplicatedChunks.length}/${chunks.length} chunks (${chunks.length - deduplicatedChunks.length} duplicates skipped)`
+    );
+
+    // Create project-specific embedding service for token tracking
+    const embeddingService = new EmbeddingService(
+      undefined,
+      undefined,
+      this.cache,
+      project_id.toString()
+    );
+
+    // Generate embeddings for deduplicated chunks
+    const embeddings = await embeddingService.embedBatch(deduplicatedChunks);
+
+    // Insert chunks into database
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      let inserted = 0;
+      for (let i = 0; i < deduplicatedChunks.length; i++) {
+        const chunk = deduplicatedChunks[i];
+        const embedding = embeddings[i];
+        const content_sha = chunkShas[i];
+
+        await client.query(
+          `INSERT INTO documents (
+             project_id, repo_name, path, chunk, embedding,
+             component, category, tags, meta, content_sha, updated_at
+           )
+           VALUES ($1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, NOW())
+           ON CONFLICT (project_id, path, content_sha)
+           DO UPDATE SET
+             chunk = EXCLUDED.chunk,
+             embedding = EXCLUDED.embedding,
+             component = EXCLUDED.component,
+             category = EXCLUDED.category,
+             tags = EXCLUDED.tags,
+             meta = EXCLUDED.meta,
+             updated_at = NOW()`,
+          [
+            project_id,
+            repo_name,
+            path,
+            chunk,
+            `[${embedding.join(',')}]`,
+            component,
+            category,
+            tags,
+            JSON.stringify(meta || {}),
+            content_sha,
+          ]
+        );
+        inserted++;
+
+        // Mark chunk as ingested for dedupe (48h TTL)
+        if (this.cache) {
+          await this.cache.setDedupe(project_id.toString(), content_sha, 48 * 3600);
+        }
+      }
+
+      await client.query('COMMIT');
+      return { chunks: inserted, project_id };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Search for similar chunks with filters
+   */
+  async search(
+    project_root: string | null,
+    query: string,
+    k: number = 8,
+    global: boolean = false,
+    component?: string,
+    category?: string,
+    tags?: string[]
+  ): Promise<SearchResult> {
+    // Cap k at 20
+    const limit = Math.min(k, 20);
+
+    // Get project ID for cache key (null for global search)
+    const project_id = project_root ? await this.getOrCreateProject(project_root) : null;
+
+    // Build cache parameters
+    const cacheParams = {
+      k: limit,
+      global,
+      component: component || null,
+      category: category || null,
+      tags: tags || null,
+    };
+
+    // Check cache for query results (5-minute TTL)
+    if (this.cache && project_id) {
+      const cachedResults = await this.cache.getCachedQuery(
+        project_id.toString(),
+        query,
+        cacheParams
+      );
+
+      if (cachedResults) {
+        console.log('[Cache] Returning cached search results');
+        return { results: cachedResults, project_id };
+      }
+    }
+
+    // Cache miss - generate query embedding
+    const queryEmbedding = await this.embedding.embed(query);
+
+    let searchResult: SearchResult;
+
+    if (global) {
+      // Global search across all projects with filters
+      const result = await this.pool.query(
+        `SELECT * FROM search_documents_global($1::vector, $2, $3, $4, $5)`,
+        [
+          `[${queryEmbedding.join(',')}]`,
+          limit,
+          component || null,
+          category || null,
+          tags || null,
+        ]
+      );
+
+      searchResult = {
+        results: result.rows.map((row) => ({
+          path: `${row.root_path}/${row.path}`,
+          chunk: row.chunk,
+          score: parseFloat(row.score),
+          component: row.component,
+          category: row.category,
+          tags: row.tags,
+          meta: {
+            ...row.meta,
+            project_root: row.root_path,
+            repo_name: row.repo_name,
+          },
+        })),
+      };
+    } else {
+      // Project-scoped search with filters
+      const result = await this.pool.query(
+        `SELECT * FROM search_documents($1, $2::vector, $3, $4, $5, $6)`,
+        [
+          project_id,
+          `[${queryEmbedding.join(',')}]`,
+          limit,
+          component || null,
+          category || null,
+          tags || null,
+        ]
+      );
+
+      searchResult = {
+        results: result.rows.map((row) => ({
+          path: row.path,
+          chunk: row.chunk,
+          score: parseFloat(row.score),
+          component: row.component,
+          category: row.category,
+          tags: row.tags,
+          meta: row.meta,
+        })),
+        project_id: project_id || undefined,
+      };
+    }
+
+    // Cache the search results (5-minute TTL)
+    if (this.cache && project_id) {
+      await this.cache.setCachedQuery(
+        project_id.toString(),
+        query,
+        searchResult.results,
+        cacheParams,
+        300 // 5 minutes
+      );
+    }
+
+    return searchResult;
+  }
+
+  /**
+   * Delete all chunks for a specific path
+   */
+  async deleteByPath(
+    project_root: string,
+    path: string
+  ): Promise<{ deleted: number }> {
+    const project_id = await this.getOrCreateProject(project_root);
+
+    const result = await this.pool.query(
+      'DELETE FROM documents WHERE project_id = $1 AND path = $2',
+      [project_id, path]
+    );
+
+    return { deleted: result.rowCount || 0 };
+  }
+
+  /**
+   * Reindex entire project (delete all + re-ingest)
+   */
+  async reindexProject(project_root: string): Promise<{ indexed: number }> {
+    const project_id = await this.getOrCreateProject(project_root);
+
+    const result = await this.pool.query(
+      'DELETE FROM documents WHERE project_id = $1',
+      [project_id]
+    );
+
+    return { indexed: 0 }; // Actual re-ingestion would be handled by caller
+  }
+
+  /**
+   * List all indexed projects with stats
+   */
+  async listProjects(): Promise<ProjectInfo[]> {
+    const result = await this.pool.query(`
+      SELECT
+        p.id,
+        p.root_path,
+        p.label,
+        COUNT(d.id) as doc_count
+      FROM projects p
+      LEFT JOIN documents d ON p.id = d.project_id
+      GROUP BY p.id, p.root_path, p.label
+      ORDER BY p.updated_at DESC
+    `);
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      root_path: row.root_path,
+      label: row.label,
+      doc_count: parseInt(row.doc_count, 10),
+    }));
+  }
+
+  /**
+   * Get cache metrics (if cache enabled)
+   */
+  getCacheMetrics() {
+    return this.cache?.getMetrics();
+  }
+
+  /**
+   * Close database connection pool and Redis connection
+   */
+  async close(): Promise<void> {
+    await this.pool.end();
+    if (this.cache) {
+      await this.cache.close();
+    }
+  }
+}

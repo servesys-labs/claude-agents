@@ -1,0 +1,202 @@
+# .npmignore - Safe npm publishing from git repo
+#
+# PHILOSOPHY: Include ALL capabilities for full orchestration framework
+#
+# ✅ INCLUDED in npm package:
+# - agents/*.md (ALL agent definitions)
+# - hooks/*.py, hooks/*.sh (ALL production hooks)
+# - mcp-servers/*/ (ALL MCP servers including vector-bridge)
+# - install.sh, package.json, README.md, CLAUDE.md, settings.json
+#
+# ❌ EXCLUDED: Credentials, build artifacts, runtime dirs, dev files
+#
+# Publishing: npm publish from git repo (no more /tmp/ manual copy)
+# CI/CD: GitHub Actions will auto-publish on version tags
+
+# ========================================
+# CRITICAL: Credentials & Secrets
+# ========================================
+# Never publish actual credentials
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.envrc
+*.key
+*.pem
+secrets/
+
+# Explicit .env file exclusions (npm doesn't handle **/.env well)
+mcp-servers/vector-bridge/.env
+mcp-servers/openai-bridge/.env
+mcp-servers/github-bridge/.env
+mcp-servers/monitoring-bridge/.env
+mcp-servers/perplexity-ask/.env
+mcp-servers/postgres-bridge/.env
+mcp-servers/redis-bridge/.env
+mcp-servers/text-to-sql-bridge/.env
+mcp-servers/browser-automation/.env
+mcp-servers/gemini-bridge/.env
+mcp-servers/setup-assistant/.env
+
+# ========================================
+# Build Artifacts (users rebuild locally)
+# ========================================
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+*.js.map
+*.d.ts.map
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.mypy_cache/
+**/.mypy_cache/
+
+# ========================================
+# Development & Testing
+# ========================================
+.git/
+.github/
+.gitignore
+.gitattributes
+.railwayignore
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+test/
+tests/
+__tests__/
+coverage/
+.nyc_output/
+test-*.ts
+test-*.js
+
+# ========================================
+# Local Development Files
+# ========================================
+Dockerfile.local-dev
+docker-compose.local-dev.yml
+custom-entrypoint.local-dev.sh
+init.sql
+
+# ========================================
+# Internal/WIP Documentation
+# ========================================
+MCP_TEST_REPORT.md
+POSTGRES_BRIDGE_HARDENING.md
+TEXT_TO_SQL_README.md
+TEXT_TO_SQL_SUMMARY.md
+COMPACTION.md
+NOTES.md
+*.draft.md
+PHASE*.md
+SPRINT_PLAN.md
+CATEGORIZATION.md
+NEXT_SESSION.md
+**/PHASE*.md
+**/SPRINT_PLAN.md
+
+# ========================================
+# Development Utilities (not for end users)
+# ========================================
+hooks/diagnose_stop_hook.sh
+hooks/test_hooks.py
+hooks/package.sh
+hooks/.claude/
+hooks/__pycache__/
+
+# ========================================
+# Runtime Directories (project-specific)
+# ========================================
+# Exclude the entire .claude runtime directory (ingest queue, session data, etc.)
+.claude/
+**/.claude/
+statsig/
+projects/
+file-history/
+history.jsonl
+shell-snapshots/
+todos/
+ingest-queue/
+
+# ========================================
+# OS & IDE Files
+# ========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+.history/
+ide/
+
+# ========================================
+# Logs & Temporary Files
+# ========================================
+# Exclude all logs - hooks will create these locally for users
+logs/
+**logs/
+**/logs/
+*.log
+**/*.log
+hooks/.claude/
+hooks/**/.claude/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# ========================================
+# Database Files (local development)
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# Backup & Archive Files
+# ========================================
+*.tar.gz
+*.tgz
+*.zip
+backup/
+backups/
+archive/
+
+# ========================================
+# Package Lock Files
+# ========================================
+# Exclude lock files - users will generate their own
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+
+# ========================================
+# Miscellaneous
+# ========================================
+.npmrc
+.yarnrc
+.pnpmrc
+*.orig
+*.rej
+*~
+
+# ========================================
+# /tmp Publishing (deprecated)
+# ========================================
+# Now publishing from git - ignore /tmp folder
+/tmp/

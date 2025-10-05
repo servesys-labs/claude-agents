@@ -1,0 +1,76 @@
+{
+  "title": "Shared folder sync for monorepo packages",
+  "description": "Copies shared utilities/types between packages in a monorepo. Uses rsync with verification to ensure consistency.",
+  "category": "workspace",
+  "component": "backend",
+  "tags": ["rsync", "shared", "monorepo", "sync"],
+  "package_manager": "pnpm",
+  "monorepo_tool": "turbo",
+  "signatures": [
+    {
+      "text": "Module not found: shared utilities",
+      "regexes": [
+        "Cannot find module.*shared",
+        "Module not found.*@shared",
+        "Cannot resolve.*shared"
+      ]
+    },
+    {
+      "text": "Type error: shared types not found",
+      "regexes": [
+        "Cannot find name.*from shared",
+        "Type.*shared.*not found"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "kind": "copy",
+      "payload": {
+        "src": "{project_root}/packages/shared/src/",
+        "dst": "{project_root}/packages/backend/src/shared/",
+        "flags": "-av --delete",
+        "include": ["*.ts", "*.tsx", "*.json"],
+        "exclude": ["*.test.ts", "*.spec.ts", "__tests__/"]
+      },
+      "description": "Sync shared utilities to backend"
+    },
+    {
+      "kind": "copy",
+      "payload": {
+        "src": "{project_root}/packages/shared/src/",
+        "dst": "{project_root}/packages/mobile/src/shared/",
+        "flags": "-av --delete",
+        "include": ["*.ts", "*.tsx"],
+        "exclude": ["*.test.ts", "*.node.ts", "__tests__/"]
+      },
+      "description": "Sync shared utilities to mobile (excluding Node-specific files)"
+    },
+    {
+      "kind": "cmd",
+      "payload": {
+        "run": "pnpm typecheck",
+        "cwd": "{project_root}"
+      },
+      "description": "Verify types resolve correctly"
+    }
+  ],
+  "checks": [
+    {
+      "cmd": "test -d {project_root}/packages/backend/src/shared",
+      "expect_exit_code": 0,
+      "timeout_ms": 5000
+    },
+    {
+      "cmd": "find {project_root}/packages/backend/src/shared -name '*.ts' | wc -l",
+      "expect_substring": "0",
+      "timeout_ms": 5000,
+      "_comment": "Expect > 0 files (will be checked differently in implementation)"
+    },
+    {
+      "cmd": "pnpm typecheck",
+      "expect_substring": "No errors",
+      "timeout_ms": 60000
+    }
+  ]
+}

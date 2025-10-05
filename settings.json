@@ -1,0 +1,138 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Web(Search|Fetch)|Task|Bash|mcp__perplexity__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/auto_project_setup.py\""
+          },
+          {
+            "type": "command",
+            "command": "env WSI_PATH=\"$CLAUDE_PROJECT_DIR/.claude/logs/wsi.json\" LOGS_DIR=\"$CLAUDE_PROJECT_DIR/.claude/logs\" python3 \"$HOME/.claude/hooks/pretooluse_validate.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/md_spam_preventer.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/posttooluse_validate.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/grep_summarizer.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/tool_output_compactor.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__openai-bridge__ask_gpt.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/gpt5_cost_tracker.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__perplexity-ask__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/perplexity_tracker.py"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__vector-bridge__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/mcp_cost_tracker.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/task_digest_capture.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env WSI_PATH=\"$CLAUDE_PROJECT_DIR/.claude/logs/wsi.json\" LOGS_DIR=\"$CLAUDE_PROJECT_DIR/.claude/logs\" python3 \"$HOME/.claude/hooks/stop_digest.py\""
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/precompact_summary.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/routing_reminder.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/log_analyzer.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/md_request_detector.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/pivot_manager.py"
+          }
+        ]
+      }
+    ]
+  }
+}

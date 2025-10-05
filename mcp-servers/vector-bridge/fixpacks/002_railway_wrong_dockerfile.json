@@ -1,0 +1,72 @@
+{
+  "title": "Railway detecting wrong Dockerfile (root instead of service subdirectory)",
+  "description": "Railway builds PostgreSQL Dockerfile from repo root instead of Node.js Dockerfile in service subdirectory, causing 'Database is uninitialized' error",
+  "category": "deploy",
+  "component": "infra",
+  "tags": ["railway", "dockerfile", "monorepo", "deployment"],
+  "package_manager": "npm",
+  "signatures": [
+    {
+      "text": "Database is uninitialized and superuser password is not specified",
+      "regexes": [
+        "Database is uninitialized",
+        "POSTGRES_PASSWORD",
+        "Using Detected Dockerfile"
+      ],
+      "meta": {
+        "platform": "railway",
+        "error_phase": "build",
+        "min_score": 0.75
+      }
+    },
+    {
+      "text": "Railway Using detected Dockerfile postgres FROM docker.io/library/postgres",
+      "regexes": [
+        "FROM.*postgres:",
+        "Using Detected Dockerfile"
+      ],
+      "meta": {
+        "platform": "railway"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "step_order": 1,
+      "kind": "env",
+      "payload": {
+        "variable": "RAILWAY_DOCKERFILE_PATH",
+        "value": "Dockerfile",
+        "description": "Set custom Dockerfile path in Railway service variables"
+      },
+      "description": "Add RAILWAY_DOCKERFILE_PATH environment variable in Railway dashboard",
+      "timeout_ms": 30000
+    },
+    {
+      "step_order": 2,
+      "kind": "cmd",
+      "payload": {
+        "command": "echo 'In Railway Dashboard: Settings → Root Directory → set to your service subdirectory (e.g., mcp-servers/vector-bridge)'"
+      },
+      "description": "Configure Railway service root directory to point to Node.js service subdirectory",
+      "timeout_ms": 5000
+    },
+    {
+      "step_order": 3,
+      "kind": "cmd",
+      "payload": {
+        "command": "git mv Dockerfile Dockerfile.local-dev && git mv docker-compose.yml docker-compose.local-dev.yml && git commit -m 'chore: Rename root Docker files to prevent Railway confusion' && git push"
+      },
+      "description": "Rename root-level Docker files to prevent Railway from detecting them",
+      "timeout_ms": 30000
+    }
+  ],
+  "checks": [
+    {
+      "check_order": 1,
+      "cmd": "curl -s https://railway.app/project/[PROJECT_ID]/service/[SERVICE_ID]/deployments | grep 'FROM node'",
+      "expect_substring": "FROM node",
+      "timeout_ms": 10000
+    }
+  ]
+}
