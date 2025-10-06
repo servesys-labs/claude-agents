@@ -29,6 +29,8 @@ import {
   getCacheStats,
   refreshCache
 } from './services/template-cache.js';
+import { listComponents, extractComponent } from './services/component-extractor.js';
+import { composePage } from './services/page-composer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -136,6 +138,33 @@ const ListSlotsSchema = z.object({
 
 const RefreshCacheSchema = z.object({
   templateId: z.string().optional(),
+});
+
+// Phase 1A: New component extraction schemas
+const ListComponentsSchema = z.object({
+  templateId: z.string(),
+});
+
+const ExtractComponentSchema = z.object({
+  templateId: z.string(),
+  componentPath: z.string(),
+  destination: z.string(),
+  withDependencies: z.boolean().optional(),
+  maxDepth: z.number().optional(),
+  overwrite: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+const ComposePageSchema = z.object({
+  sitePath: z.string(),
+  pagePath: z.string(),
+  sections: z.array(z.object({
+    importPath: z.string(),
+    componentName: z.string().optional(),
+    props: z.record(z.any()).optional(),
+  })),
+  overwrite: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
 });
 
 // MCP Server
@@ -374,6 +403,61 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           templateId: { type: 'string', description: 'Template ID to refresh (all if omitted)' },
         },
+      },
+    },
+    // Phase 1A: New component extraction tools
+    {
+      name: 'list_components',
+      description: 'List all extractable components from a template',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          templateId: { type: 'string', description: 'Template ID to scan' },
+        },
+        required: ['templateId'],
+      },
+    },
+    {
+      name: 'extract_component',
+      description: 'Extract a component from template with its dependencies',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          templateId: { type: 'string', description: 'Template ID' },
+          componentPath: { type: 'string', description: 'Component path (e.g., src/components/hero.tsx)' },
+          destination: { type: 'string', description: 'Destination path' },
+          withDependencies: { type: 'boolean', description: 'Include relative imports', default: true },
+          maxDepth: { type: 'number', description: 'Max dependency depth (default: 3)', default: 3 },
+          overwrite: { type: 'boolean', description: 'Overwrite existing files', default: false },
+          dryRun: { type: 'boolean', description: 'Preview without writing', default: false },
+        },
+        required: ['templateId', 'componentPath', 'destination'],
+      },
+    },
+    {
+      name: 'compose_page',
+      description: 'Compose a Next.js page from component sections',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sitePath: { type: 'string', description: 'Site root directory' },
+          pagePath: { type: 'string', description: 'Page file path (e.g., app/page.tsx)' },
+          sections: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                importPath: { type: 'string', description: 'Import path' },
+                componentName: { type: 'string', description: 'Component name (auto-detected if omitted)' },
+                props: { type: 'object', description: 'Component props' },
+              },
+              required: ['importPath'],
+            },
+          },
+          overwrite: { type: 'boolean', description: 'Overwrite existing page', default: true },
+          dryRun: { type: 'boolean', description: 'Preview without writing', default: false },
+        },
+        required: ['sitePath', 'pagePath', 'sections'],
       },
     },
   ],
@@ -832,6 +916,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             elapsedMs: Date.now() - startTime,
           });
         }
+      }
+
+      // Phase 1A: New component extraction tool handlers
+      case 'list_components': {
+        const input = ListComponentsSchema.parse(args);
+        const result = await listComponents(input.templateId);
+
+        return formatResult({
+          ...result,
+          elapsedMs: Date.now() - startTime,
+        });
+      }
+
+      case 'extract_component': {
+        const input = ExtractComponentSchema.parse(args);
+        const result = await extractComponent(input);
+
+        return formatResult({
+          ok: result.success,
+          ...result,
+          elapsedMs: Date.now() - startTime,
+        });
+      }
+
+      case 'compose_page': {
+        const input = ComposePageSchema.parse(args);
+        const result = await composePage(input);
+
+        return formatResult({
+          ok: result.success,
+          ...result,
+          elapsedMs: Date.now() - startTime,
+        });
       }
 
       default:
