@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.4] - 2025-10-05
+
+### Added
+- **CLAUDE.md Documentation**: Added PM Agent section to global orchestration framework
+  - Documented autonomous decision-making capability (hook #11)
+  - Updated ASK-THEN-ACT policy to mention PM Agent integration
+  - Includes setup instructions, cost info, resume workflow
+
+### Fixed
+- **PM launchd agent location**: Now properly copies to `~/Library/LaunchAgents/` (standard location)
+  - Consistent with auto-setup agents (projectstatus, queue)
+  - Previously loaded from project directory (fragile)
+  - Now visible alongside other Claude agents in LaunchAgents
+
 ## [1.1.3] - 2025-10-05
 
 ### Changed

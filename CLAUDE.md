@@ -68,6 +68,7 @@ Emit a lightweight DIGEST at these decision points:
 	•	NO-REGRESSION: Never remove features, imports, or tests just to "make it pass."
 	•	ADDITIVE-FIRST: Add missing files/functions instead of deleting references.
 	•	ASK-THEN-ACT: If scope or ownership is unclear, ask 1–3 clarifying questions with concrete options.
+		- **Note**: If ENABLE_PM_AGENT=true, questions at session end trigger autonomous PM decisions (GPT-4o-mini analyzes and decides within seconds).
 	•	PROD-READY BIAS: Code, tests, and docs must always be shippable.
 </core_policies>
 
@@ -535,6 +536,30 @@ ADU — Auto-Doc Updater
 - **Why**: Saves context tokens while preserving debugging info
 - **User Action**: Main Agent should summarize or delegate to IE
 - **Note**: Saves ~70% context, focuses on actionable errors
+
+**11. PM Agent Autonomous Decision-Making** 🤖 (v1.1.3+)
+- **What**: GPT-4o-mini makes strategic decisions when sessions end with questions
+- **When**: Stop hook detects decision points ("Should I X or Y?", "What would you prefer?")
+- **How**:
+  1. Stop hook detects question in last message
+  2. Queue file created in `.claude/pm-queue/`
+  3. PM processor **immediately triggered** (2-5 seconds, not 10 minutes!)
+  4. GPT-4o-mini analyzes context + AGENTS.md + past decisions
+  5. Decision written to `.claude/logs/pm-resume/*.md`
+- **Cost**: ~$0.0005 per decision (96% cheaper than GPT-4o)
+- **Fallback**: Launchd agent runs every 10 minutes if immediate trigger fails
+- **Resume**: Use `bash ~/.claude/hooks/resume_latest.sh` or `resume_with_context.sh`
+- **User Action**:
+  - Enable: `export ENABLE_PM_AGENT=true` + `export OPENAI_API_KEY=sk-proj-...`
+  - Setup: `bash ~/.claude/hooks/setup_pm_launchd.sh` (optional, fallback only)
+  - Resume: Paste clipboard output into new session
+- **Files**:
+  - Config: `AGENTS.md` (project context for PM decisions)
+  - Hook: `pm_decision_hook.py` (detects questions, queues requests)
+  - Processor: `pm_queue_processor.py` (calls OpenAI API, writes decisions)
+  - History: `.claude/logs/pm-decisions.json` (learning from past decisions)
+- **Benefits**: Overnight development, no waiting for user input, maintains flow
+- **Note**: See `PM_AGENT_SETUP.md` for full documentation
 
 ### Checkpoint System (✅ IMPLEMENTED)
 **Auto-checkpoint triggers:**
