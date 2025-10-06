@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.11] - 2025-10-05
+
+### Fixed
+- **Stop Hook Timeout**: Removed queue processing from `stop_digest.py` to prevent timeouts and cancellations during session end. All vector ingestion now deferred to launchd queue processor agent (runs every 15 minutes). Stop hook now completes in <1s.
+- **CLAUDE.md Auto-Injection**: Added 10-minute modification window protection to `project_status.py` to prevent unwanted `<project_status>` section injection during manual edits.
+- **CLAUDE.md Size**: Trimmed orchestration framework documentation from 55,368 to 39,331 characters (28.9% reduction) to meet 40k performance limit. Condensed verbose examples while preserving all critical functionality.
+- **Type Safety**: Fixed mypy type error in `project_status.py` milestones assignment using `cast()`.
+
 ## [1.0.10] - 2025-10-05
 
 ### Added
