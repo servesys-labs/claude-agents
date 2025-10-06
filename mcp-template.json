@@ -7,6 +7,13 @@
         "DATABASE_URL": "${DATABASE_URL_MEMORY}",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}"
       }
+    },
+    "ui-template-bridge": {
+      "command": "node",
+      "args": ["/Users/agentsy/.claude/mcp-servers/ui-template-bridge/dist/index.js"],
+      "env": {
+        "UI_TEMPLATE_API_URL": "https://ui-template-api-production-production.up.railway.app"
+      }
     }
   }
 }

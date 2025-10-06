@@ -1,0 +1,315 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Template Metadata Schema",
+  "description": "Metadata for UI templates in the registry",
+  "type": "object",
+  "required": ["id", "name", "version", "stack", "capabilities", "theme"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique template identifier (kebab-case)",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "examples": ["ai-saas-template", "nodus-agent-template"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name for the template",
+      "examples": ["AI SaaS Template", "Nodus Agent Template"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the template",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["1.0.0", "2.3.1"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of what the template provides"
+    },
+    "author": {
+      "type": "string",
+      "description": "Template author or creator",
+      "examples": ["Dillion Verma", "MagicUI Design", "Nodus"]
+    },
+    "license": {
+      "type": "string",
+      "description": "License type",
+      "default": "MIT",
+      "examples": ["MIT", "Apache-2.0", "GPL-3.0"]
+    },
+    "stack": {
+      "type": "object",
+      "description": "Technology stack information",
+      "required": ["framework", "styling", "components"],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "enum": ["next.js", "remix", "astro", "vite"],
+          "default": "next.js"
+        },
+        "version": {
+          "type": "string",
+          "description": "Framework version",
+          "examples": ["14.2.0", "15.0.0"]
+        },
+        "styling": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tailwindcss", "css-modules", "styled-components"]
+          },
+          "default": ["tailwindcss"]
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["shadcn/ui", "magicui", "headlessui", "radix-ui"]
+          },
+          "default": ["shadcn/ui", "magicui"]
+        },
+        "typescript": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "Features and capabilities provided by the template",
+      "items": {
+        "type": "string",
+        "enum": [
+          "landing",
+          "dashboard",
+          "auth",
+          "blog",
+          "portfolio",
+          "marketing",
+          "docs",
+          "ai-agent",
+          "chat",
+          "devtool",
+          "mobile-first",
+          "pwa",
+          "ecommerce",
+          "admin",
+          "cms"
+        ]
+      },
+      "minItems": 1,
+      "examples": [["landing", "dashboard", "auth"], ["portfolio", "blog"]]
+    },
+    "theme": {
+      "type": "object",
+      "description": "Default theme configuration and design tokens",
+      "required": ["tokens", "modes"],
+      "properties": {
+        "tokens": {
+          "type": "object",
+          "description": "Design tokens (colors, typography, spacing)",
+          "properties": {
+            "colors": {
+              "type": "object",
+              "properties": {
+                "primary": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "secondary": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "accent": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "background": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "foreground": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "muted": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "border": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"}
+              }
+            },
+            "typography": {
+              "type": "object",
+              "properties": {
+                "fontFamily": {
+                  "type": "object",
+                  "properties": {
+                    "sans": {"type": "string"},
+                    "mono": {"type": "string"},
+                    "display": {"type": "string"}
+                  }
+                },
+                "fontSize": {
+                  "type": "object",
+                  "properties": {
+                    "xs": {"type": "string"},
+                    "sm": {"type": "string"},
+                    "base": {"type": "string"},
+                    "lg": {"type": "string"},
+                    "xl": {"type": "string"},
+                    "2xl": {"type": "string"},
+                    "3xl": {"type": "string"},
+                    "4xl": {"type": "string"}
+                  }
+                }
+              }
+            },
+            "spacing": {
+              "type": "object",
+              "properties": {
+                "container": {"type": "string"},
+                "section": {"type": "string"},
+                "component": {"type": "string"}
+              }
+            },
+            "borderRadius": {
+              "type": "object",
+              "properties": {
+                "sm": {"type": "string"},
+                "md": {"type": "string"},
+                "lg": {"type": "string"},
+                "full": {"type": "string"}
+              }
+            }
+          }
+        },
+        "modes": {
+          "type": "array",
+          "description": "Supported theme modes",
+          "items": {
+            "type": "string",
+            "enum": ["light", "dark", "system"]
+          },
+          "default": ["light", "dark"]
+        },
+        "defaultMode": {
+          "type": "string",
+          "enum": ["light", "dark", "system"],
+          "default": "system"
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "description": "Available pages in the template",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "path"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable page identifier",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name for the page"
+          },
+          "path": {
+            "type": "string",
+            "description": "Route path for the page",
+            "pattern": "^/.*$"
+          },
+          "slots": {
+            "type": "array",
+            "description": "Content slots available on this page",
+            "items": {
+              "type": "object",
+              "required": ["id", "type"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Stable slot identifier"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["text", "richtext", "image", "video", "component"]
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Human-readable label for the slot"
+                },
+                "default": {
+                  "type": "string",
+                  "description": "Default content for the slot"
+                },
+                "required": {
+                  "type": "boolean",
+                  "default": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "description": "Reusable components with stable IDs",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "type", "category"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable component identifier"
+          },
+          "type": {
+            "type": "string",
+            "description": "Component type (button, card, hero, etc.)"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["ui", "layout", "marketing", "navigation", "forms", "data-display"]
+          },
+          "variants": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "props": {
+            "type": "object",
+            "description": "Configurable props schema"
+          }
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "description": "Preview assets",
+      "properties": {
+        "screenshot": {
+          "type": "string",
+          "description": "URL to full-page screenshot"
+        },
+        "thumbnail": {
+          "type": "string",
+          "description": "URL to thumbnail image"
+        },
+        "demo": {
+          "type": "string",
+          "description": "URL to live demo",
+          "format": "uri"
+        }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "description": "Migration and update information",
+      "properties": {
+        "from": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Compatible source versions for migration"
+        },
+        "breaking": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "version": {"type": "string"},
+              "description": {"type": "string"},
+              "guide": {"type": "string"}
+            }
+          }
+        },
+        "notes": {
+          "type": "string",
+          "description": "General migration notes"
+        }
+      }
+    }
+  }
+}

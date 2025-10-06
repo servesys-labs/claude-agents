@@ -1,0 +1,268 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Site Blueprint Schema",
+  "description": "Blueprint for stamping out a new site from a template",
+  "type": "object",
+  "required": ["templateId", "siteId", "brand", "pages"],
+  "properties": {
+    "templateId": {
+      "type": "string",
+      "description": "ID of the template this site is based on",
+      "examples": ["ai-saas-template", "nodus-agent-template"]
+    },
+    "siteId": {
+      "type": "string",
+      "description": "Unique identifier for this site",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "examples": ["my-startup", "acme-dashboard"]
+    },
+    "siteName": {
+      "type": "string",
+      "description": "Display name for the site",
+      "examples": ["My Startup", "Acme Dashboard"]
+    },
+    "brand": {
+      "type": "object",
+      "description": "Brand configuration and design tokens",
+      "required": ["name", "tokens"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Brand name",
+          "examples": ["Acme Inc", "My Startup"]
+        },
+        "tagline": {
+          "type": "string",
+          "description": "Brand tagline or slogan",
+          "examples": ["Ship faster, build better", "AI-powered workflows"]
+        },
+        "logo": {
+          "type": "object",
+          "properties": {
+            "light": {"type": "string", "description": "Path or URL to light mode logo"},
+            "dark": {"type": "string", "description": "Path or URL to dark mode logo"},
+            "icon": {"type": "string", "description": "Path or URL to favicon"}
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "description": "Brand-specific design tokens (overrides template defaults)",
+          "properties": {
+            "colors": {
+              "type": "object",
+              "properties": {
+                "primary": {"type": "string"},
+                "secondary": {"type": "string"},
+                "accent": {"type": "string"}
+              }
+            },
+            "typography": {
+              "type": "object",
+              "properties": {
+                "fontFamily": {
+                  "type": "object",
+                  "properties": {
+                    "sans": {"type": "string"},
+                    "display": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "social": {
+          "type": "object",
+          "description": "Social media links",
+          "properties": {
+            "twitter": {"type": "string"},
+            "github": {"type": "string"},
+            "linkedin": {"type": "string"},
+            "discord": {"type": "string"}
+          }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "description": "Pages to include and their content",
+      "items": {
+        "type": "object",
+        "required": ["pageId", "enabled"],
+        "properties": {
+          "pageId": {
+            "type": "string",
+            "description": "Stable page ID from template meta.json"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether to include this page in the site",
+            "default": true
+          },
+          "path": {
+            "type": "string",
+            "description": "Override default path for this page"
+          },
+          "slots": {
+            "type": "object",
+            "description": "Content for each slot on the page",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string",
+                  "description": "Slot content (text, markdown, or component config)"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["text", "richtext", "markdown", "component"]
+                }
+              }
+            }
+          },
+          "seo": {
+            "type": "object",
+            "description": "SEO metadata for this page",
+            "properties": {
+              "title": {"type": "string"},
+              "description": {"type": "string"},
+              "keywords": {"type": "array", "items": {"type": "string"}},
+              "ogImage": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "description": "Additional components to add to the site",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "componentId": {
+            "type": "string",
+            "description": "Stable component ID from template"
+          },
+          "variant": {
+            "type": "string",
+            "description": "Component variant to use"
+          },
+          "props": {
+            "type": "object",
+            "description": "Component props configuration"
+          },
+          "location": {
+            "type": "object",
+            "description": "Where to insert the component",
+            "properties": {
+              "pageId": {"type": "string"},
+              "after": {"type": "string", "description": "Insert after this element ID"},
+              "before": {"type": "string", "description": "Insert before this element ID"}
+            }
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "description": "Feature flags and configuration",
+      "properties": {
+        "analytics": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "provider": {"type": "string", "enum": ["ga4", "plausible", "fathom"]},
+            "id": {"type": "string"}
+          }
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "provider": {"type": "string", "enum": ["clerk", "auth0", "supabase", "nextauth"]},
+            "config": {"type": "object"}
+          }
+        },
+        "payments": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "provider": {"type": "string", "enum": ["stripe", "paddle", "lemonsqueezy"]},
+            "config": {"type": "object"}
+          }
+        },
+        "cms": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean", "default": false},
+            "provider": {"type": "string", "enum": ["contentful", "sanity", "strapi"]},
+            "config": {"type": "object"}
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "description": "Deployment configuration",
+      "properties": {
+        "platform": {
+          "type": "string",
+          "enum": ["vercel", "netlify", "railway", "cloudflare"],
+          "default": "vercel"
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment variables",
+          "additionalProperties": {"type": "string"}
+        },
+        "domain": {
+          "type": "string",
+          "description": "Custom domain",
+          "format": "hostname"
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Don't-think-about-it defaults and recipes",
+      "properties": {
+        "recipe": {
+          "type": "string",
+          "enum": [
+            "minimal-landing",
+            "saas-with-auth",
+            "portfolio-with-blog",
+            "ai-agent-interface",
+            "devtool-with-docs",
+            "mobile-first-pwa"
+          ],
+          "description": "Pre-configured recipe with sensible defaults"
+        },
+        "autoFill": {
+          "type": "boolean",
+          "description": "Auto-fill empty slots with placeholder content",
+          "default": true
+        },
+        "autoSEO": {
+          "type": "boolean",
+          "description": "Auto-generate SEO metadata from content",
+          "default": true
+        },
+        "autoScreenshots": {
+          "type": "boolean",
+          "description": "Auto-generate preview screenshots",
+          "default": true
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Blueprint metadata",
+      "properties": {
+        "created": {"type": "string", "format": "date-time"},
+        "updated": {"type": "string", "format": "date-time"},
+        "version": {"type": "string"},
+        "author": {"type": "string"}
+      }
+    }
+  }
+}
