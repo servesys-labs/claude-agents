@@ -43,9 +43,9 @@ if [ -f ".claude/logs/NOTES.md" ]; then
     LAST_DIGEST=$(tac ".claude/logs/NOTES.md" | awk '/^## \[/{p=1} p{print} /^---$/{if(p) exit}' | tac)
 fi
 
-if [ -f "NOTES.md" ]; then
+if [ -f ".claude/logs/NOTES.md" ]; then
     STATE_FILES="$STATE_FILES
-- NOTES.md exists (project-specific notes)"
+- .claude/logs/NOTES.md exists (project-specific notes)"
 fi
 
 if [ -f "FEATURE_MAP.md" ]; then

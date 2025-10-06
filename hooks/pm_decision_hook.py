@@ -333,6 +333,18 @@ def main(
             log_file.write(f"{msg}\n")
         print(msg)
 
+    # Feature flag check: ENABLE_PM_AUTONOMOUS
+    # If false (default), PM only triggers when manually called (pm_answer_now.sh)
+    # If true, PM triggers automatically on session end
+    if os.environ.get("ENABLE_PM_AUTONOMOUS", "").lower() != "true":
+        if log_file:
+            log_file.close()
+        return {
+            "ok": True,
+            "pm_autonomous_disabled": True,
+            "message": "PM Agent available for manual triggering (use: bash ~/.claude/hooks/pm_answer_now.sh)"
+        }
+
     # Detect decision point
     decision_point = detect_decision_point(last_message)
     if not decision_point:
@@ -343,22 +355,45 @@ def main(
 
     log("🤔 Decision point detected! Queuing for PM agent...")
 
-    # Enqueue request and immediately process (don't wait for launchd)
-    request_file = enqueue_pm_request(decision_point, last_digest)
-    log(f"✅ PM request queued: {os.path.basename(request_file)}")
-
-    # Immediately trigger queue processor (no need to wait for launchd poll)
+    # Create dialogue-ready conversation instead of simple queue file
     try:
-        processor_path = os.path.join(os.path.dirname(__file__), "pm_queue_processor.py")
+        # Import conversation manager
+        sys.path.insert(0, os.path.dirname(__file__))
+        from pm_conversation import create_conversation
+
+        # Create conversation with proper structure
+        project_root = os.getcwd()
+        decision_text = decision_point.get("question", "") if isinstance(decision_point, dict) else str(decision_point)
+        request_id = create_conversation(decision_text, project_root, last_digest)
+        log(f"✅ PM conversation created: {request_id}")
+
+        # Immediately trigger dialogue processor (multi-round capability)
+        processor_path = os.path.join(os.path.dirname(__file__), "pm_dialogue_processor.py")
         subprocess.run(
             [sys.executable, processor_path],
-            timeout=30,
+            timeout=120,  # Longer timeout for multi-round dialogue
             capture_output=True,
-            check=False  # Don't fail if processor has issues
+            check=False
         )
-        log(f"✅ PM processor triggered immediately (decision ready in seconds)")
+        log(f"✅ PM dialogue processor triggered (multi-round strategic analysis)")
+
     except Exception as e:
-        log(f"⚠️  Failed to trigger processor (will be processed by launchd): {e}")
+        # Fallback to old single-round system
+        log(f"⚠️  Dialogue mode failed, using fallback: {e}")
+        request_file = enqueue_pm_request(decision_point, last_digest)
+        log(f"✅ PM request queued (fallback): {os.path.basename(request_file)}")
+
+        try:
+            processor_path = os.path.join(os.path.dirname(__file__), "pm_queue_processor.py")
+            subprocess.run(
+                [sys.executable, processor_path],
+                timeout=30,
+                capture_output=True,
+                check=False
+            )
+            log(f"✅ PM processor triggered (single-round fallback)")
+        except Exception as inner_e:
+            log(f"⚠️  Failed to trigger fallback processor: {inner_e}")
 
     if log_file:
         log_file.close()

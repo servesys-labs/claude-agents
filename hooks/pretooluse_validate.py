@@ -265,7 +265,7 @@ def main():
         file_path = args.get("file_path", "")
         if "schema.prisma" in file_path.lower() or "/migrations/" in file_path.lower():
             # Check if DME agent was used recently
-            notes_path = os.path.join(cwd, "NOTES.md")
+            notes_path = os.path.join(cwd, ".claude", "logs", "NOTES.md")
             dme_used = False
             if os.path.exists(notes_path):
                 try:
@@ -396,7 +396,7 @@ def main():
         # Block removal without IDS review
         if any(cmd in command for cmd in ["npm uninstall", "pip uninstall", "pnpm remove"]):
             # Check if IDS was consulted
-            notes_path = os.path.join(cwd, "NOTES.md")
+            notes_path = os.path.join(cwd, ".claude", "logs", "NOTES.md")
             ids_consulted = False
             if os.path.exists(notes_path):
                 try:

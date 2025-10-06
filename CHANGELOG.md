@@ -1,5 +1,85 @@
 # Changelog
 
+## [1.2.1] - 2025-10-06
+
+### Added
+- **PM Inline Intervention Mode**: Trigger PM immediately on any agent question (for POC/testing)
+  - **NEW**: `pm_inline_trigger.py` - Manual PM trigger without waiting for session end
+  - **NEW**: `pm_answer_now.sh` - Clipboard-based quick trigger (copy question → run script → paste decision)
+  - **NEW**: `ENABLE_PM_AUTONOMOUS` feature flag - Controls automatic session-end triggering
+  - **Use Case**: Proof-of-concept projects where you want rapid autonomous decisions
+  - **Workflow**: Agent asks → Copy question → Run script → PM analyzes → Paste decision
+  - **Not automatic**: Must be manually triggered (doesn't interrupt active sessions)
+  - **Documentation**: Added "Inline Intervention Mode" and feature flag sections to PM_DIALOGUE_SYSTEM.md
+
+### Fixed
+- **CRITICAL**: Fixed silent ingestion failures caused by incorrect NOTES.md paths
+  - **Root Cause**: Hooks looking for `NOTES.md` in project root instead of `.claude/logs/NOTES.md`
+  - **Fixed Files**:
+    - `task_digest_capture.py` (line 28-29): Now uses `.claude/logs/NOTES.md`
+    - `pretooluse_validate.py` (lines 268, 399): Updated both DME and IDS checks
+    - `context_budget_viz.py` (line 12): Fixed path construction
+    - `resume_with_context.sh` (line 46): Updated file existence check
+    - `stop_digest.py`: Fixed `debug_log` undefined error by adding `debug_log_path` parameter
+  - **Enhanced Error Logging**:
+    - Added path validation logging to `task_digest_capture.py`
+    - Added directory creation logging to `stop_digest.py::ensure_file()`
+    - Added write operation logging to `stop_digest.py::append_notes()`
+    - All errors now show full paths and context for debugging
+    - Fixed parameter passing: `ensure_file()` and `append_notes()` now accept `debug_log_path`
+  - **Impact**: Resolves ingestion failures in singulare-nexus and other projects
+  - **Debugging**: Check `stop_hook_debug.log` and `task_digest_debug.log` for detailed path information
+
+### Changed
+- **PM Autonomous Mode** is now **opt-in** via `ENABLE_PM_AUTONOMOUS=true`
+  - **Default** (not set): PM available for manual triggering only (use `pm_answer_now.sh`)
+  - **Autonomous** (true): PM triggers automatically on session-end questions (original v1.2.0 behavior)
+  - **Migration path**: Test manually first → enable autonomous once confident
+  - **Breaking change**: Autonomous mode no longer default (user must explicitly enable)
+
+### Philosophy
+- Session-end PM (v1.2.0 autonomous): Automatic overnight decisions (opt-in with ENABLE_PM_AUTONOMOUS=true)
+- Inline PM (v1.2.1 manual): On-demand decisions for testing/POC (default behavior)
+- User controls when to invoke PM vs answer themselves
+- Progressive enhancement: manual → autonomous as trust builds
+
+## [1.2.0] - 2025-10-06
+
+### Added
+- **PM Multi-Round Strategic Dialogue** 🤖💬: "Vibe Coding" - PM Agent can now have back-and-forth conversations before making decisions
+  - **NEW**: `pm_conversation.py` - Conversation manager with tool execution (read files, grep, git status, etc.)
+  - **NEW**: `pm_dialogue_processor.py` - Multi-round GPT-4o dialogue system with function calling
+  - **PM Tools**: read_file, grep, list_files, get_git_status, get_git_log, make_decision
+  - **Context Gathering**: PM autonomously reads project files, searches code, checks git before deciding
+  - **Strategic Reasoning**: Uses GPT-4o (not mini) for complex architectural decisions
+  - **Conversation Storage**: Full dialogue history in `.claude/pm-queue/{id}/conversation.json`
+  - **Max Rounds**: 10 rounds (typically 3-7 sufficient)
+  - **Cost**: ~$0.005-0.02 per decision (varies by rounds)
+  - **Example**: IPSA asks "GCP or Docker?" → PM reads AGENTS.md + package.json + git → Decides "Docker first (prototyping phase)"
+  - **Philosophy**: User sets vision, PM + agents execute autonomously with informed decisions
+
+### Changed
+- **pm_decision_hook.py**: Now creates structured conversations instead of simple queue files
+  - Immediately triggers `pm_dialogue_processor.py` (120s timeout for multi-round)
+  - Falls back to single-round `pm_queue_processor.py` if dialogue mode fails
+- **CLAUDE.md**: Updated Hook #11 with full multi-round dialogue documentation
+  - Renamed from "Autonomous Decision-Making" to "Multi-Round Strategic Dialogue"
+  - Added example flow, tool list, cost breakdown, benefits section
+
+### Technical Details
+- **Architecture**: Conversation-based vs request/response
+  - Before: Single-round GPT-4o-mini with prompt → JSON decision
+  - After: Multi-round GPT-4o with tools → context gathering → informed decision
+- **Storage**: `.claude/pm-queue/{request-id}/`
+  - `request.json` - Original decision point + DIGEST
+  - `conversation.json` - All dialogue rounds with timestamps
+  - `context/` - Tool outputs (file contents, grep results, etc.)
+- **Tool Execution**: Sandboxed within project root
+  - File reads limited to 500 lines
+  - Grep results limited to 100 matches
+  - All tools have 5-10s timeouts
+- **Fallback**: Graceful degradation to single-round if dialogue fails
+
 ## [1.1.7] - 2025-10-06
 
 ### Fixed

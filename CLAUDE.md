@@ -537,28 +537,56 @@ ADU — Auto-Doc Updater
 - **User Action**: Main Agent should summarize or delegate to IE
 - **Note**: Saves ~70% context, focuses on actionable errors
 
-**11. PM Agent Autonomous Decision-Making** 🤖 (v1.1.3+)
-- **What**: GPT-4o-mini makes strategic decisions when sessions end with questions
-- **When**: Stop hook detects decision points ("Should I X or Y?", "What would you prefer?")
-- **How**:
-  1. Stop hook detects question in last message
-  2. Queue file created in `.claude/pm-queue/`
-  3. PM processor **immediately triggered** (2-5 seconds, not 10 minutes!)
-  4. GPT-4o-mini analyzes context + AGENTS.md + past decisions
-  5. Decision written to `.claude/logs/pm-resume/*.md`
-- **Cost**: ~$0.0005 per decision (96% cheaper than GPT-4o)
-- **Fallback**: Launchd agent runs every 10 minutes if immediate trigger fails
+**11. PM Agent Multi-Round Strategic Dialogue** 🤖💬 (v1.2.0+ - Vibe Coding)
+- **What**: GPT-4o conducts multi-round dialogue with tools to gather context before making strategic decisions
+- **When**: Stop hook detects decision points ("Should I X or Y?", "Which approach?", "What would you prefer?")
+- **How** (Multi-Round Dialogue Process):
+  1. Stop hook detects question → creates conversation in `.claude/pm-queue/{id}/`
+  2. PM dialogue processor **immediately triggered** (not 10 minutes!)
+  3. **Round 1**: GPT-4o analyzes decision point, asks clarifying questions
+  4. **Rounds 2-N**: PM calls tools to gather context:
+     - `read_file`: Read project files (package.json, AGENTS.md, code, etc.)
+     - `grep`: Search codebase for patterns
+     - `list_files`: Check directory structure
+     - `get_git_status`: Review current changes
+     - `get_git_log`: Check recent commits
+  5. **Final Round**: PM calls `make_decision` tool with strategic choice
+  6. Decision + reasoning + actions written to `.claude/logs/pm-resume/*.md`
+- **Model**: GPT-4o (not mini) for strategic reasoning and tool orchestration
+- **Cost**: ~$0.005-0.02 per decision (varies by rounds, typically 3-7 rounds)
+- **Context Gathering**: PM autonomously reads files, searches code, checks git before deciding
+- **Storage**: Full conversation history in `.claude/pm-queue/{id}/conversation.json`
+- **Fallback**: Single-round GPT-4o-mini if dialogue mode fails
 - **Resume**: Use `bash ~/.claude/hooks/resume_latest.sh` or `resume_with_context.sh`
 - **User Action**:
   - Enable: `export ENABLE_PM_AGENT=true` + `export OPENAI_API_KEY=sk-proj-...`
+  - Model: `export PM_DIALOGUE_MODEL=gpt-4o` (default, can use o3 for complex decisions)
   - Setup: `bash ~/.claude/hooks/setup_pm_launchd.sh` (optional, fallback only)
   - Resume: Paste clipboard output into new session
 - **Files**:
-  - Config: `AGENTS.md` (project context for PM decisions)
-  - Hook: `pm_decision_hook.py` (detects questions, queues requests)
-  - Processor: `pm_queue_processor.py` (calls OpenAI API, writes decisions)
+  - Config: `AGENTS.md` (project vision + context for PM)
+  - Hook: `pm_decision_hook.py` (detects questions, creates conversations)
+  - Processor: `pm_dialogue_processor.py` (multi-round GPT-4o dialogue with tools)
+  - Conversation: `pm_conversation.py` (manages rounds, tool execution, context storage)
   - History: `.claude/logs/pm-decisions.json` (learning from past decisions)
-- **Benefits**: Overnight development, no waiting for user input, maintains flow
+- **Benefits**:
+  - **Vibe Coding**: User sets high-level vision, PM + agents execute autonomously
+  - **Context-Aware**: PM reads project files before deciding (no blind guesses)
+  - **Strategic**: GPT-4o reasoning for complex architectural decisions
+  - **Overnight Development**: Wake up to informed decisions, not questions
+  - **Transparent**: Full conversation history shows PM's reasoning process
+- **Example Flow**:
+  ```
+  IPSA asks: "Should I setup GCP infra (A) or local Docker (B)?"
+  → PM Round 1: Reads AGENTS.md, package.json, checks git status
+  → PM Round 2: Greps for existing Docker/GCP config
+  → PM Round 3: Reads .github/workflows to check CI setup
+  → PM Final: Decides "B (local Docker first)" with reasoning:
+     "AGENTS.md shows prototyping phase, no GCP credentials in env,
+      Docker Compose already in repo. Start local, defer GCP to Phase 3."
+  ```
+- **Max Rounds**: 10 (typically 3-7 sufficient)
+- **Timeout**: 120s (allows multiple tool calls)
 - **Note**: See `PM_AGENT_SETUP.md` for full documentation
 
 ### Checkpoint System (✅ IMPLEMENTED)
@@ -993,5 +1021,43 @@ Auto-deploys via Railway when pushed to main.
 </mcp_server_config>
 
 ⸻
+
+## 🚨 CRITICAL REMINDER: Main Agent DIGEST Requirement
+
+**MANDATORY**: Main Agent MUST emit a DIGEST block at the end of ANY work session where you:
+- Created or modified files (Write, Edit tools)
+- Completed multi-step tasks (TodoWrite with completed items)
+- Made architectural decisions
+- Orchestrated subagents
+
+**Why this matters**:
+- Without DIGEST → No vector ingestion
+- Without DIGEST → No WSI tracking
+- Without DIGEST → No NOTES.md updates
+- Without DIGEST → Session work is lost
+
+**When to emit DIGEST**:
+- ✅ After creating documentation/planning files
+- ✅ After completing a phase of work
+- ✅ Before ending session (if work was done)
+- ❌ Not needed for simple Q&A or read-only sessions
+
+**Main Agent DIGEST template**:
+```json DIGEST
+{
+  "agent": "Main",
+  "task_id": "project-nexus-planning",
+  "decisions": ["Created implementation plan", "Documented architecture"],
+  "files": [
+    {"path": "docs/ARCHITECTURE.md", "reason": "created"},
+    {"path": "docs/API_SPEC.md", "reason": "created"}
+  ],
+  "contracts": ["n/a"],
+  "next": ["Ready for Phase 1 implementation"],
+  "evidence": {"phase": "planning_complete", "files_created": 11}
+}
+```
+
+**If you created files this session**: Emit DIGEST before responding "done" to user.
 
 </claude_code_orchestration_framework>

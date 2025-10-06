@@ -9,7 +9,7 @@ import sys, os, json
 from pathlib import Path
 
 WSI_PATH = Path(os.path.expanduser("~/claude-hooks/wsi.json"))
-NOTES_PATH = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())) / "NOTES.md"
+NOTES_PATH = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())) / ".claude" / "logs" / "NOTES.md"
 
 def estimate_tokens(text):
     """Rough token estimate: ~4 chars per token."""

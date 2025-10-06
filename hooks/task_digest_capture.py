@@ -25,7 +25,8 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Use official CLAUDE_PROJECT_DIR env var for project-specific files
 PROJECT_ROOT = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
-NOTES_PATH = os.path.join(PROJECT_ROOT, "NOTES.md")
+CLAUDE_DIR = os.path.join(PROJECT_ROOT, ".claude")
+NOTES_PATH = os.path.join(CLAUDE_DIR, "logs", "NOTES.md")
 WSI_CAP = 10
 
 DIGEST_RE = re.compile(r"```json\s*DIGEST\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
@@ -51,11 +52,22 @@ def extract_digest(text):
 def append_to_notes(digest):
     """Append DIGEST to NOTES.md."""
     # Ensure NOTES.md exists
-    Path(NOTES_PATH).parent.mkdir(parents=True, exist_ok=True)
+    try:
+        Path(NOTES_PATH).parent.mkdir(parents=True, exist_ok=True)
+        log_debug(f"NOTES.md parent directory: {Path(NOTES_PATH).parent}")
+        log_debug(f"NOTES.md full path: {NOTES_PATH}")
+    except Exception as e:
+        log_debug(f"❌ ERROR: Failed to create NOTES.md parent directory: {e}")
+        log_debug(f"   Path attempted: {NOTES_PATH}")
+        raise
+
     if not os.path.exists(NOTES_PATH):
+        log_debug(f"Creating new NOTES.md at {NOTES_PATH}")
         with open(NOTES_PATH, "w", encoding="utf-8") as f:
             f.write("# NOTES.md - Agent Digest Archive\n\n")
             f.write("Last 20 digests. Auto-captured from subagent work.\n\n---\n\n")
+    else:
+        log_debug(f"NOTES.md exists at {NOTES_PATH}")
 
     ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     agent = digest.get("agent", "UNKNOWN")

@@ -94,11 +94,34 @@ def save_json(path, obj):
         json.dump(obj, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
-def ensure_file(path, header=None):
-    if not os.path.exists(path):
-        with open(path, "w", encoding="utf-8") as f:
-            if header:
-                f.write(header + "\n")
+def ensure_file(path, header=None, debug_log_path=None):
+    try:
+        # Ensure parent directory exists
+        parent_dir = os.path.dirname(path)
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+            if debug_log_path:
+                with open(debug_log_path, "a") as f:
+                    f.write(f"Created parent directory: {parent_dir}\n")
+
+        if not os.path.exists(path):
+            if debug_log_path:
+                with open(debug_log_path, "a") as f:
+                    f.write(f"Creating new file: {path}\n")
+            with open(path, "w", encoding="utf-8") as f:
+                if header:
+                    f.write(header + "\n")
+        else:
+            if debug_log_path:
+                with open(debug_log_path, "a") as f:
+                    f.write(f"File exists: {path}\n")
+    except Exception as e:
+        if debug_log_path:
+            with open(debug_log_path, "a") as f:
+                f.write(f"❌ ERROR in ensure_file: {e}\n")
+                f.write(f"   Path attempted: {path}\n")
+                f.write(f"   Parent dir: {os.path.dirname(path)}\n")
+        raise
 
 def append_warning(message: str):
     """Append a user-facing warning to WARNINGS.md with a timestamp."""
@@ -898,8 +921,14 @@ def ingest_digest_to_vector(digest):
     except Exception as e:
         return {"error": str(e)}
 
-def append_notes(digest, rag_suggestions=None):
-    ensure_file(NOTES_PATH, "# NOTES (living state)\n\nLast 20 digests. Older entries archived to logs/notes-archive/.\n")
+def append_notes(digest, rag_suggestions=None, debug_log_path=None):
+    if debug_log_path:
+        with open(debug_log_path, "a") as f:
+            f.write(f"📝 append_notes called - NOTES_PATH: {NOTES_PATH}\n")
+            f.write(f"   Project root: {PROJECT_ROOT}\n")
+            f.write(f"   CLAUDE_DIR: {CLAUDE_DIR}\n")
+
+    ensure_file(NOTES_PATH, "# NOTES (living state)\n\nLast 20 digests. Older entries archived to logs/notes-archive/.\n", debug_log_path=debug_log_path)
     ts = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
     agent = digest.get("agent", "UNKNOWN")
     task  = digest.get("task_id", "untagged")
@@ -934,8 +963,26 @@ def append_notes(digest, rag_suggestions=None):
         f"**Evidence**\n{evidence_text}"
         f"{rag_text}"
     )
-    with open(NOTES_PATH, "a", encoding="utf-8") as f:
-        f.write(block)
+
+    try:
+        if debug_log_path:
+            with open(debug_log_path, "a") as f:
+                f.write(f"✍️  Writing DIGEST block to {NOTES_PATH}\n")
+                f.write(f"   Agent: {agent}, Task: {task}\n")
+                f.write(f"   Block size: {len(block)} bytes\n")
+
+        with open(NOTES_PATH, "a", encoding="utf-8") as f:
+            f.write(block)
+
+        if debug_log_path:
+            with open(debug_log_path, "a") as f:
+                f.write(f"✅ Successfully wrote DIGEST to NOTES.md\n")
+    except Exception as e:
+        if debug_log_path:
+            with open(debug_log_path, "a") as f:
+                f.write(f"❌ ERROR writing to NOTES.md: {e}\n")
+                f.write(f"   Path: {NOTES_PATH}\n")
+        raise
 
     # Rotate after appending
     rotate_notes()
@@ -1249,7 +1296,7 @@ def main():
         with open(debug_log, "a") as f:
             f.write(f"📝 About to call append_notes...\n")
         try:
-            append_notes(digest, rag_suggestions)
+            append_notes(digest, rag_suggestions, debug_log_path=debug_log)
             with open(debug_log, "a") as f:
                 f.write(f"📝 append_notes completed\n")
         except Exception as e:
