@@ -472,6 +472,146 @@ export class SolutionProvider {
   }
 
   /**
+   * Link a pattern to a solution (for pattern-solution learning)
+   */
+  async linkPatternToSolution(
+    patternTag: string,
+    patternCategory: string,
+    solutionId: number,
+    success: boolean
+  ): Promise<void> {
+    console.log(`[SolutionProvider] Linking pattern "${patternTag}" (${patternCategory}) to solution #${solutionId} - ${success ? 'SUCCESS' : 'FAILURE'}`);
+
+    await this.pool.query(
+      'SELECT link_pattern_to_solution($1, $2, $3, $4)',
+      [patternTag, patternCategory, solutionId, success]
+    );
+
+    console.log(`[SolutionProvider] Pattern-solution link recorded`);
+  }
+
+  /**
+   * Get solutions for a specific pattern (ranked by success rate for this pattern)
+   */
+  async getSolutionsForPattern(
+    patternTag: string,
+    patternCategory?: string,
+    limit: number = 5
+  ): Promise<SolutionMatch[]> {
+    console.log(`[SolutionProvider] Finding solutions for pattern: ${patternTag}${patternCategory ? ` (${patternCategory})` : ''}`);
+
+    const result = await this.pool.query(
+      'SELECT * FROM get_solutions_for_pattern($1, $2, $3)',
+      [patternTag, patternCategory || null, limit]
+    );
+
+    console.log(`[SolutionProvider] Found ${result.rows.length} solutions for pattern`);
+
+    return result.rows.map(row => ({
+      solution: {
+        id: row.solution_id,
+        title: row.title,
+        description: row.description || '',
+        category: row.category,
+        component: undefined,
+        tags: [],
+        success_count: row.applications || 0,
+        failure_count: 0,
+        success_rate: row.success_rate || 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      score: row.success_rate || 0,
+      signature_text: '',
+      step_count: 0,
+    }));
+  }
+
+  /**
+   * Detect patterns in query text and suggest solutions
+   * Returns patterns found in the query with their top solutions
+   */
+  async detectPatternsInQuery(
+    queryText: string,
+    limit: number = 3
+  ): Promise<Array<{
+    patternTag: string;
+    patternCategory: string;
+    matchScore: number;
+    solutionCount: number;
+    topSolutionId: number | null;
+    topSolutionTitle: string | null;
+    topSolutionSuccessRate: number;
+  }>> {
+    console.log(`[SolutionProvider] Detecting patterns in query: "${queryText.substring(0, 100)}..."`);
+
+    const result = await this.pool.query(
+      'SELECT * FROM detect_patterns_in_query($1, $2)',
+      [queryText, limit]
+    );
+
+    console.log(`[SolutionProvider] Detected ${result.rows.length} patterns`);
+
+    return result.rows.map(row => ({
+      patternTag: row.pattern_tag,
+      patternCategory: row.pattern_category,
+      matchScore: parseFloat(row.match_score),
+      solutionCount: parseInt(row.solution_count, 10),
+      topSolutionId: row.top_solution_id,
+      topSolutionTitle: row.top_solution_title,
+      topSolutionSuccessRate: parseFloat(row.top_solution_success_rate || 0),
+    }));
+  }
+
+  /**
+   * Get golden paths (best pattern-solution combinations)
+   */
+  async getGoldenPaths(
+    minApplications: number = 3,
+    limit: number = 20
+  ): Promise<Array<{
+    patternTag: string;
+    patternCategory: string;
+    solutionId: number;
+    solutionTitle: string;
+    successRate: number;
+    applications: number;
+    avgHelpfulRatio: number;
+    projectsCount: number;
+  }>> {
+    console.log(`[SolutionProvider] Fetching golden paths (min ${minApplications} applications)`);
+
+    const result = await this.pool.query(
+      'SELECT * FROM get_golden_paths($1, $2)',
+      [minApplications, limit]
+    );
+
+    console.log(`[SolutionProvider] Found ${result.rows.length} golden paths`);
+
+    return result.rows.map(row => ({
+      patternTag: row.pattern_tag,
+      patternCategory: row.pattern_category,
+      solutionId: row.solution_id,
+      solutionTitle: row.solution_title,
+      successRate: parseFloat(row.success_rate),
+      applications: parseInt(row.applications, 10),
+      avgHelpfulRatio: parseFloat(row.avg_helpful_ratio || 0),
+      projectsCount: parseInt(row.projects_count, 10),
+    }));
+  }
+
+  /**
+   * Update pattern-solution helpfulness scores from feedback
+   */
+  async updatePatternSolutionHelpfulness(): Promise<void> {
+    console.log(`[SolutionProvider] Updating pattern-solution helpfulness scores from feedback`);
+
+    await this.pool.query('SELECT update_pattern_solution_helpfulness()');
+
+    console.log(`[SolutionProvider] Helpfulness scores updated`);
+  }
+
+  /**
    * Update solution metadata
    */
   async updateSolution(

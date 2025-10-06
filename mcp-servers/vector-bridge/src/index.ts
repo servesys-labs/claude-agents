@@ -342,6 +342,97 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'pattern_detect',
+        description:
+          'Detect patterns in error message or query text and suggest linked solutions. Returns patterns found with their best solutions.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query_text: {
+              type: 'string',
+              description: 'Error message or query text to analyze for patterns',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of patterns to return (default: 3)',
+              default: 3,
+            },
+          },
+          required: ['query_text'],
+        },
+      },
+      {
+        name: 'pattern_solutions',
+        description:
+          'Get solutions ranked for a specific pattern. Returns solutions that work best for this pattern based on success rates.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pattern_tag: {
+              type: 'string',
+              description: 'Pattern tag (e.g., "redis-connection", "typescript-module")',
+            },
+            pattern_category: {
+              type: 'string',
+              description: 'Optional: Pattern category filter (runtime, build, deploy, etc.)',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of solutions (default: 5)',
+              default: 5,
+            },
+          },
+          required: ['pattern_tag'],
+        },
+      },
+      {
+        name: 'pattern_link',
+        description:
+          'Link a pattern to a solution and record success/failure. Used after applying a solution to learn which solutions work for which patterns.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pattern_tag: {
+              type: 'string',
+              description: 'Pattern tag from documents or error analysis',
+            },
+            pattern_category: {
+              type: 'string',
+              description: 'Pattern category (runtime, build, deploy, etc.)',
+            },
+            solution_id: {
+              type: 'number',
+              description: 'Solution ID that was applied',
+            },
+            success: {
+              type: 'boolean',
+              description: 'Whether the solution successfully fixed the issue',
+            },
+          },
+          required: ['pattern_tag', 'pattern_category', 'solution_id', 'success'],
+        },
+      },
+      {
+        name: 'golden_paths',
+        description:
+          'Get golden paths (most successful pattern-solution combinations). Returns proven solutions that work consistently across projects.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            min_applications: {
+              type: 'number',
+              description: 'Minimum number of applications required (default: 3)',
+              default: 3,
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of golden paths (default: 20)',
+              default: 20,
+            },
+          },
+        },
+      },
+      {
         name: 'auto_setup_credentials',
         description: autoSetupSchema.description,
         inputSchema: autoSetupSchema.inputSchema,
@@ -550,6 +641,152 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const output = validated.success
           ? `✅ Success recorded for solution #${validated.solution_id}\nNew success rate: ${((solution?.solution.success_rate || 0) * 100).toFixed(0)}%`
           : `❌ Failure recorded for solution #${validated.solution_id}\nSuccess rate: ${((solution?.solution.success_rate || 0) * 100).toFixed(0)}%`;
+
+        return {
+          content: [{ type: 'text', text: output }],
+        };
+      }
+
+      case 'pattern_detect': {
+        const schema = z.object({
+          query_text: z.string(),
+          limit: z.number().default(3),
+        });
+        const validated = schema.parse(args);
+
+        const patterns = await solutionProvider.detectPatternsInQuery(
+          validated.query_text,
+          validated.limit
+        );
+
+        if (patterns.length === 0) {
+          return {
+            content: [{ type: 'text', text: '❌ No patterns detected in query text.' }],
+          };
+        }
+
+        let output = `🔍 **Detected ${patterns.length} Pattern(s)**\n\n`;
+
+        for (const pattern of patterns) {
+          output += `### Pattern: ${pattern.patternTag} (${pattern.patternCategory})\n`;
+          output += `- **Match Score:** ${(pattern.matchScore * 100).toFixed(0)}%\n`;
+          output += `- **Linked Solutions:** ${pattern.solutionCount}\n`;
+
+          if (pattern.topSolutionId) {
+            output += `- **Top Solution:** #${pattern.topSolutionId} - ${pattern.topSolutionTitle}\n`;
+            output += `- **Success Rate:** ${(pattern.topSolutionSuccessRate * 100).toFixed(0)}%\n`;
+            output += `\n💡 Use \`pattern_solutions\` with pattern_tag="${pattern.patternTag}" for all ranked solutions.\n`;
+          }
+
+          output += '\n';
+        }
+
+        return {
+          content: [{ type: 'text', text: output }],
+        };
+      }
+
+      case 'pattern_solutions': {
+        const schema = z.object({
+          pattern_tag: z.string(),
+          pattern_category: z.string().optional(),
+          limit: z.number().default(5),
+        });
+        const validated = schema.parse(args);
+
+        const solutions = await solutionProvider.getSolutionsForPattern(
+          validated.pattern_tag,
+          validated.pattern_category,
+          validated.limit
+        );
+
+        if (solutions.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ No solutions found for pattern "${validated.pattern_tag}"${validated.pattern_category ? ` (${validated.pattern_category})` : ''}`
+            }],
+          };
+        }
+
+        let output = `📋 **Solutions for Pattern: ${validated.pattern_tag}**\n\n`;
+
+        for (const match of solutions) {
+          const sol = match.solution;
+          output += `### Solution #${sol.id}: ${sol.title}\n`;
+          output += `- **Category:** ${sol.category}\n`;
+          output += `- **Success Rate (for this pattern):** ${(sol.success_rate * 100).toFixed(0)}% (${sol.success_count} applications)\n`;
+          output += `- **Description:** ${sol.description}\n`;
+          output += `\n💡 Use \`solution_preview\` with solution_id=${sol.id} to see steps.\n\n`;
+        }
+
+        return {
+          content: [{ type: 'text', text: output }],
+        };
+      }
+
+      case 'pattern_link': {
+        const schema = z.object({
+          pattern_tag: z.string(),
+          pattern_category: z.string(),
+          solution_id: z.number(),
+          success: z.boolean(),
+        });
+        const validated = schema.parse(args);
+
+        await solutionProvider.linkPatternToSolution(
+          validated.pattern_tag,
+          validated.pattern_category,
+          validated.solution_id,
+          validated.success
+        );
+
+        const output = validated.success
+          ? `✅ Pattern "${validated.pattern_tag}" successfully linked to solution #${validated.solution_id}`
+          : `❌ Pattern "${validated.pattern_tag}" linked to solution #${validated.solution_id} as FAILURE (will adjust rankings)`;
+
+        return {
+          content: [{ type: 'text', text: output }],
+        };
+      }
+
+      case 'golden_paths': {
+        const schema = z.object({
+          min_applications: z.number().default(3),
+          limit: z.number().default(20),
+        });
+        const validated = schema.parse(args);
+
+        const paths = await solutionProvider.getGoldenPaths(
+          validated.min_applications,
+          validated.limit
+        );
+
+        if (paths.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ No golden paths found (min ${validated.min_applications} applications required)`
+            }],
+          };
+        }
+
+        let output = `🏆 **Golden Paths** (${paths.length} proven pattern-solution combinations)\n\n`;
+        output += `_Minimum ${validated.min_applications} applications required_\n\n`;
+
+        for (const path of paths) {
+          output += `### ${path.patternTag} (${path.patternCategory}) → Solution #${path.solutionId}\n`;
+          output += `**${path.solutionTitle}**\n`;
+          output += `- **Success Rate:** ${(path.successRate * 100).toFixed(0)}%\n`;
+          output += `- **Applications:** ${path.applications}\n`;
+          output += `- **Projects:** ${path.projectsCount}\n`;
+          if (path.avgHelpfulRatio > 0) {
+            output += `- **Helpfulness:** ${(path.avgHelpfulRatio * 100).toFixed(0)}%\n`;
+          }
+          output += '\n';
+        }
+
+        output += `\n💡 Use \`solution_preview\` to see steps for any solution.\n`;
 
         return {
           content: [{ type: 'text', text: output }],

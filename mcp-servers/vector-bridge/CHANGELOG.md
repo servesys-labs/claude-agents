@@ -5,6 +5,41 @@ All notable changes to the Vector Bridge MCP Server will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-10-06
+
+### Added - Phase 4: Smart Solution Discovery & Pattern Surfacing
+- **Pattern-Solution Linking**: Automatic linking of detected patterns to proven solutions
+- **Pattern Detection in Queries**: `detect_patterns_in_query()` analyzes error messages to find matching patterns
+- **Pattern-Based Solution Ranking**: Solutions ranked by pattern-specific success rates
+- **Golden Paths**: Discover most successful pattern-solution combinations across projects
+- **Cross-Project Pattern Intelligence**: Learn which solutions work best for specific error patterns
+- **Migration 007**: Pattern-solutions table and smart discovery functions
+
+### New MCP Tools
+- `pattern_detect`: Detect patterns in error messages and suggest linked solutions
+- `pattern_solutions`: Get solutions ranked for a specific pattern (e.g., "redis-connection")
+- `pattern_link`: Link a pattern to a solution and record success/failure for learning
+- `golden_paths`: Get proven pattern-solution combinations with high success rates
+
+### SolutionProvider API
+- `detectPatternsInQuery()`: Analyze query text for patterns
+- `getSolutionsForPattern()`: Get ranked solutions for a pattern tag
+- `linkPatternToSolution()`: Record pattern-solution application with outcome
+- `getGoldenPaths()`: Retrieve most successful pattern-solution pairs
+- `updatePatternSolutionHelpfulness()`: Sync feedback scores to pattern rankings
+
+### Changed
+- Solutions now track pattern-specific success rates in addition to global success rates
+- Pattern-solution ranking combines: success rate (60%) + applications (30%) + helpfulness (10%)
+- Golden paths require 3+ applications by default to ensure statistical significance
+
+### Technical Details
+- Pattern tags derived from `documents.tags` field (first tag used as pattern identifier)
+- Pattern categories align with solution categories (runtime, build, deploy, etc.)
+- Pattern detection requires minimum 3 document occurrences to avoid noise
+- Pattern matching uses tag overlap (minimum 10% match score required)
+- Success tracking: `success_count` and `failure_count` per pattern-solution pair
+
 ## [1.2.0] - 2025-10-06
 
 ### Added - Phase 3: Learning System

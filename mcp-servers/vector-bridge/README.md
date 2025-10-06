@@ -23,6 +23,13 @@ Global vector memory service for Claude Code with **intelligent learning and fee
 - **Pattern detection**: `detect_patterns` finds recurring solutions across projects
 - **Self-improving**: Rankings improve over time based on actual usefulness
 
+### 🧠 Phase 4: Smart Solution Discovery (v1.3.0)
+- **Pattern-Solution Linking**: Automatically connect error patterns to proven solutions
+- **Pattern Detection**: Analyze error messages to find matching patterns (`pattern_detect`)
+- **Pattern-Specific Rankings**: Solutions ranked by success rate for specific patterns
+- **Golden Paths**: Discover most successful pattern-solution combinations (`golden_paths`)
+- **Cross-Project Intelligence**: Learn which solutions work best across all projects
+
 ## MCP Tools
 
 ### memory_ingest
@@ -115,6 +122,55 @@ Record success/failure of applied solutions.
 }
 ```
 
+### pattern_detect (NEW in v1.3.0)
+Detect patterns in error messages and suggest linked solutions.
+
+```typescript
+{
+  query_text: "Redis connection failing with ENOTFOUND redis.railway.internal",
+  limit: 3
+}
+```
+
+Returns patterns with match scores and top solutions.
+
+### pattern_solutions (NEW in v1.3.0)
+Get solutions ranked for a specific pattern.
+
+```typescript
+{
+  pattern_tag: "redis-connection",
+  pattern_category: "runtime",  // optional
+  limit: 5
+}
+```
+
+Returns solutions ranked by pattern-specific success rates.
+
+### pattern_link (NEW in v1.3.0)
+Link a pattern to a solution after applying it.
+
+```typescript
+{
+  pattern_tag: "redis-connection",
+  pattern_category: "runtime",
+  solution_id: 16,
+  success: true
+}
+```
+
+### golden_paths (NEW in v1.3.0)
+Get proven pattern-solution combinations.
+
+```typescript
+{
+  min_applications: 3,  // minimum # of times pattern+solution succeeded
+  limit: 20
+}
+```
+
+Returns most successful pattern-solution pairs across all projects.
+
 ## Setup
 
 ### Quick Start (Railway)
@@ -161,6 +217,7 @@ Run in order:
 4. `004_hnsw_indexes.sql` - Performance (HNSW indexes)
 5. `005_hybrid_search.sql` - BM25 + time decay
 6. `006_feedback_system.sql` - Feedback + pattern detection
+7. `007_pattern_solution_linking.sql` - Pattern-solution linking (v1.3.0)
 
 ## Schema
 
@@ -174,7 +231,12 @@ memory_feedback(id, chunk_id, helpful, context, created_at)
 
 -- Solution memory
 solutions(id, title, description, category, signatures, steps, checks, success_rate, ...)
-solution_applications(id, solution_id, success, applied_at)
+signatures(id, solution_id, text, regexes, embedding, meta)
+steps(id, solution_id, step_order, kind, payload, description, timeout_ms)
+checks(id, solution_id, check_order, cmd, expect_substring, expect_exit_code, timeout_ms)
+
+-- Pattern-solution linking (v1.3.0)
+pattern_solutions(id, pattern_tag, pattern_category, solution_id, success_count, failure_count, avg_helpful_ratio)
 ```
 
 ## Hook Integration
