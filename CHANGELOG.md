@@ -9,6 +9,12 @@
   - Launchd agent now fallback-only (runs every 10 minutes for failed immediate triggers)
   - User experience: Nearly instant PM decisions on session end
 
+### Fixed
+- **PM launchd agent location**: Now properly copies to `~/Library/LaunchAgents/` (standard location)
+  - Consistent with auto-setup agents (projectstatus, queue)
+  - Previously loaded from project directory (fragile)
+  - Now visible alongside other Claude agents in LaunchAgents
+
 ### Updated
 - **PM_AGENT_SETUP.md**: Reflects immediate processing, launchd now optional
 - **Architecture diagram**: Shows immediate trigger flow

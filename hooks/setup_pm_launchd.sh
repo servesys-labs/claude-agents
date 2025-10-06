@@ -54,9 +54,18 @@ EOF
 
 echo "✅ Created plist: $PLIST_PATH"
 
-# Load into launchd
-launchctl unload "$PLIST_PATH" 2>/dev/null || true
-launchctl load "$PLIST_PATH"
+# Copy to ~/Library/LaunchAgents (standard location, consistent with auto-setup agents)
+USER_LAUNCHD_DIR="$HOME/Library/LaunchAgents"
+USER_PLIST_PATH="$USER_LAUNCHD_DIR/$PLIST_NAME"
+
+mkdir -p "$USER_LAUNCHD_DIR"
+cp "$PLIST_PATH" "$USER_PLIST_PATH"
+
+echo "✅ Copied to: $USER_PLIST_PATH"
+
+# Load into launchd from standard location
+launchctl unload "$USER_PLIST_PATH" 2>/dev/null || true
+launchctl load "$USER_PLIST_PATH"
 
 echo "✅ Loaded launchd agent: $LABEL"
 echo ""
@@ -66,4 +75,4 @@ echo "Commands:"
 echo "  Check status:  launchctl list | grep pm-queue"
 echo "  View logs:     tail -f $CLAUDE_DIR/logs/pm-queue-processor-stdout.log"
 echo "  Manual run:    python3 $SCRIPT_PATH"
-echo "  Unload:        launchctl unload $PLIST_PATH"
+echo "  Unload:        launchctl unload $USER_PLIST_PATH"
