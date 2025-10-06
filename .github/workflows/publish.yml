@@ -59,7 +59,7 @@ jobs:
           echo "✅ No credentials found"
 
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
 
@@ -77,7 +77,7 @@ jobs:
 
             ### Installation
             ```bash
-            npm install -g claude-agents
+            npm install -g @servesys-labs/claude-agents
             ```
 
             ### What's Included
