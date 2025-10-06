@@ -23,6 +23,9 @@ screenshots/.screenshot-cache.json
 temp/
 tmp/
 
+# Extracted templates (not used - server uses ~/vibe/ui-templates)
+templates/
+
 # Logs
 *.log
 npm-debug.log*
