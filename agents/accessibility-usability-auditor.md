@@ -112,3 +112,23 @@ When uncertain about edge cases or when standards may conflict with project-spec
 - When to use: at audit kickoff, when similar accessibility issues recur, or before finalizing remediation strategies.
 - How to search: call `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`, `global: false`); if low-signal, fall back to global with relevant filters (`problem_type`, `solution_pattern`, `tech_stack`).
 - Constraints: ≤2s budget (5s cap), ≤1 search per audit phase. Treat results as hints; prefer recent validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After audits, emit a JSON DIGEST fence capturing critical findings and remediation plan.
+
+Example:
+```json DIGEST
+{
+  "agent": "Accessibility & Usability Auditor",
+  "task_id": "<audit-id>",
+  "decisions": [
+    "Contrast failures on buttons (1.4.3); add accessible color tokens",
+    "Fix focus order and keyboard traps in modal"
+  ],
+  "files": [
+    { "path": "app/components/Button.tsx", "reason": "token update recommended" }
+  ],
+  "next": ["IE to patch tokens; SUPB to verify UI states"],
+  "evidence": { "wcag": ["1.4.3","2.1.1"], "issues": 4 }
+}
+```

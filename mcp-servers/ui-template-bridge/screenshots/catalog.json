@@ -1,0 +1,221 @@
+{
+  "generated": "2025-10-06T17:00:16.709Z",
+  "total": 18,
+  "totalWebP": 0,
+  "locations": {
+    "primary": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots",
+    "permanent": "/Users/agentsy/vibe/ui-screenshots"
+  },
+  "templates": {
+    "dillionverma-portfolio": {
+      "framework": "next.js",
+      "isWeb": true,
+      "isMobile": false,
+      "note": "Next.js web application",
+      "screenshots": [
+        {
+          "filename": "dillionverma-portfolio-blog-mobile.png",
+          "page": "blog",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Blog listing page",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-portfolio-blog-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-portfolio-blog-mobile.png"
+        },
+        {
+          "filename": "dillionverma-portfolio-blog.png",
+          "page": "blog",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Blog listing page",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-portfolio-blog.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-portfolio-blog.png"
+        },
+        {
+          "filename": "dillionverma-portfolio-home-mobile.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Portfolio homepage with hero, experience, projects",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-portfolio-home-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-portfolio-home-mobile.png"
+        },
+        {
+          "filename": "dillionverma-portfolio-home.png",
+          "page": "home",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Portfolio homepage with hero, experience, projects",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-portfolio-home.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-portfolio-home.png"
+        }
+      ]
+    },
+    "dillionverma-startup-template": {
+      "framework": "next.js",
+      "isWeb": true,
+      "isMobile": false,
+      "note": "Next.js web application",
+      "screenshots": [
+        {
+          "filename": "dillionverma-startup-template-home-mobile.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Startup landing page with hero, features, pricing",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-startup-template-home-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-startup-template-home-mobile.png"
+        },
+        {
+          "filename": "dillionverma-startup-template-home.png",
+          "page": "home",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Startup landing page with hero, features, pricing",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-startup-template-home.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-startup-template-home.png"
+        },
+        {
+          "filename": "dillionverma-startup-template-login-mobile.png",
+          "page": "login",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Authentication page",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-startup-template-login-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-startup-template-login-mobile.png"
+        },
+        {
+          "filename": "dillionverma-startup-template-login.png",
+          "page": "login",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Authentication page",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/dillionverma-startup-template-login.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/dillionverma-startup-template-login.png"
+        }
+      ]
+    },
+    "magicuidesign-agent-template": {
+      "framework": "next.js",
+      "isWeb": true,
+      "isMobile": false,
+      "note": "Next.js web application",
+      "screenshots": [
+        {
+          "filename": "magicuidesign-agent-template-home-mobile.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Agent template with hero, bento grid, features",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-agent-template-home-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-agent-template-home-mobile.png"
+        },
+        {
+          "filename": "magicuidesign-agent-template-home.png",
+          "page": "home",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Agent template with hero, bento grid, features",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-agent-template-home.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-agent-template-home.png"
+        }
+      ]
+    },
+    "magicuidesign-devtool-template": {
+      "framework": "next.js",
+      "isWeb": true,
+      "isMobile": false,
+      "note": "Next.js web application",
+      "screenshots": [
+        {
+          "filename": "magicuidesign-devtool-template-blog-mobile.png",
+          "page": "blog",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Blog section",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-devtool-template-blog-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-devtool-template-blog-mobile.png"
+        },
+        {
+          "filename": "magicuidesign-devtool-template-blog.png",
+          "page": "blog",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Blog section",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-devtool-template-blog.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-devtool-template-blog.png"
+        },
+        {
+          "filename": "magicuidesign-devtool-template-home-mobile.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Dev tool landing page",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-devtool-template-home-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-devtool-template-home-mobile.png"
+        },
+        {
+          "filename": "magicuidesign-devtool-template-home.png",
+          "page": "home",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "Dev tool landing page",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-devtool-template-home.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-devtool-template-home.png"
+        }
+      ]
+    },
+    "magicuidesign-mobile-template": {
+      "framework": "next.js",
+      "isWeb": true,
+      "isMobile": false,
+      "note": "Next.js web application",
+      "screenshots": [
+        {
+          "filename": "magicuidesign-mobile-template-home-mobile.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Mobile-first Next.js template with bottom drawer navigation",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-mobile-template-home-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-mobile-template-home-mobile.png"
+        },
+        {
+          "filename": "magicuidesign-mobile-template-home.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "Mobile-first Next.js template with bottom drawer navigation",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-mobile-template-home.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-mobile-template-home.png"
+        }
+      ]
+    },
+    "magicuidesign-saas-template": {
+      "framework": "next.js",
+      "isWeb": true,
+      "isMobile": false,
+      "note": "Next.js web application",
+      "screenshots": [
+        {
+          "filename": "magicuidesign-saas-template-home-mobile.png",
+          "page": "home",
+          "viewport": "mobile",
+          "dimensions": "375x667",
+          "description": "SaaS landing page with features, pricing, testimonials",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-saas-template-home-mobile.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-saas-template-home-mobile.png"
+        },
+        {
+          "filename": "magicuidesign-saas-template-home.png",
+          "page": "home",
+          "viewport": "desktop",
+          "dimensions": "1280x800",
+          "description": "SaaS landing page with features, pricing, testimonials",
+          "path": "/Users/agentsy/.claude/mcp-servers/ui-template-bridge/screenshots/magicuidesign-saas-template-home.png",
+          "permanentPath": "/Users/agentsy/vibe/ui-screenshots/magicuidesign-saas-template-home.png"
+        }
+      ]
+    }
+  }
+}

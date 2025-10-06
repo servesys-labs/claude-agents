@@ -20,6 +20,22 @@ CLAUDE_MD_PATH = os.path.join(PROJECT_ROOT, "CLAUDE.md")
 def _ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
+def _is_global_root() -> bool:
+    try:
+        return os.path.realpath(PROJECT_ROOT) == os.path.realpath(os.path.expanduser("~/.claude"))
+    except Exception:
+        return False
+
+def _should_skip_update() -> Optional[str]:
+    """Return reason string if CLAUDE.md project_status update should be skipped."""
+    # Explicit environment opt-out
+    if os.environ.get("DISABLE_CLAUDE_MD_UPDATE", "false").lower() == "true":
+        return "env:DISABLE_CLAUDE_MD_UPDATE"
+    # Global ~/.claude by default is stable — skip unless explicitly allowed
+    if _is_global_root() and os.environ.get("ALLOW_GLOBAL_CLAUDE_MD_UPDATE", "false").lower() != "true":
+        return "global_root_protected"
+    return None
+
 _ensure_dir(LOGS_DIR)
 
 def call_vector_bridge_mcp(tool_name: str, params: Dict[str, Any], timeout_sec: int = 8) -> Optional[Dict[str, Any]]:
@@ -277,7 +293,7 @@ def _infer_phase(decisions: List[str], risks: List[str], next_steps: List[str], 
         return "Hardening"
     return "Executing"
 
-def _collect_status() -> Dict[str, Any]:
+def _collect_status(use_vector: bool = True) -> Dict[str, Any]:
     # Freshness / queue status
     queue_dir = os.path.join(CLAUDE_DIR, "ingest-queue")
     queued = 0
@@ -286,18 +302,22 @@ def _collect_status() -> Dict[str, Any]:
     except Exception:
         pass
 
+    # Decide whether to use vector search: only if explicitly enabled and queue is empty
+    vector_env_enabled = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"
+    do_vector = bool(use_vector and vector_env_enabled and queued == 0)
+
     # Vector-derived bullets
     decisions_results = _vector_search_local(
         "project status decisions recent",
         k=6,
         filters={"type": ["decision", "status", "incident"], "stage": ["implemented", "validated"]},
-    )
+    ) if do_vector else []
     risks_results = _vector_search_local(
         "risk blocker incident regression",
         k=6,
         filters={"problem_type": ["timeout", "build", "security", "infra"]},
-    )
-    next_results = _vector_search_local("milestone next plan", k=6)
+    ) if do_vector else []
+    next_results = _vector_search_local("milestone next plan", k=6) if do_vector else []
 
     # Fallback from NOTES.md
     notes_text = _read_text(os.path.join(CLAUDE_DIR, "logs", "NOTES.md"))
@@ -409,7 +429,7 @@ def _collect_status() -> Dict[str, Any]:
             break
 
     # Summary line with phase inference
-    vector_enabled = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"
+    vector_enabled = do_vector
     data_state = "fresh" if (vector_enabled and not has_creds_warning and queued==0) else "stale"
     phase = _infer_phase(decisions_b, risks_b, next_b, data_state, queued, vector_enabled)
     if hot_focus:
@@ -422,6 +442,7 @@ def _collect_status() -> Dict[str, Any]:
         "project": os.path.basename(PROJECT_ROOT) or "project",
         "updated_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "data": {"state": data_state, "queue": queued},
+        "mode": ("vector" if vector_enabled else "local"),
         "summary": summary,
         "milestones": {
             "done": decisions_b[:1] or [],
@@ -512,14 +533,41 @@ def _insert_or_replace_block(md_text: str, block_text: str) -> str:
     # Fallback: prepend
     return block_text + "\n" + cleaned
 
-def update_claude_md() -> Dict[str, Any]:
-    # Skip auto-injection entirely if CLAUDE.md exists
-    # This prevents the hook from overwriting user's global orchestration config
-    if os.path.exists(CLAUDE_MD_PATH):
-        return {"ok": True, "updated": False, "skipped": "file_exists", "status": {}}
+def update_claude_md(use_vector: bool = True) -> Dict[str, Any]:
+    """Update the <project_status> block inside CLAUDE.md (do not create file).
+    Returns {ok, updated, status} and never rewrites other sections.
+    """
+    skip_reason = _should_skip_update()
+    if skip_reason:
+        return {"ok": True, "updated": False, "skipped": skip_reason}
+    before = _read_text(CLAUDE_MD_PATH)
+    if not before:
+        return {"ok": False, "error": f"CLAUDE.md not found at {CLAUDE_MD_PATH}"}
 
-    # Only create CLAUDE.md if it doesn't exist (handled by auto_project_setup.py)
-    return {"ok": True, "updated": False, "skipped": "not_needed", "status": {}}
+    status = _collect_status(use_vector=use_vector)
+    block = _render_status_block(status)
+    new_text = _insert_or_replace_block(before, block)
+    changed = hashlib.sha256(new_text.encode()).hexdigest() != hashlib.sha256(before.encode()).hexdigest()
+    if changed:
+        with open(CLAUDE_MD_PATH, "w", encoding="utf-8") as f:
+            f.write(new_text)
+
+    # Write a small health log for diagnostics
+    try:
+        health = {
+            "updated_at": status.get("updated_at"),
+            "mode": status.get("mode"),
+            "updated": changed,
+            "queue": status.get("data", {}).get("queue"),
+            "data_state": status.get("data", {}).get("state"),
+        }
+        with open(os.path.join(LOGS_DIR, "project_status_health.json"), "w", encoding="utf-8") as hf:
+            json.dump(health, hf, indent=2)
+            hf.write("\n")
+    except Exception:
+        pass
+
+    return {"ok": True, "updated": changed, "status": status}
 
 def _sanitize_label(s: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9\.-]+", "-", s or "project")
@@ -583,7 +631,8 @@ def build_launchd_plist(interval_sec: int = 300):
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] in {"--update-claude-md", "-u"}:
-        res = update_claude_md()
+        fast_local = ('--fast-local' in sys.argv)
+        res = update_claude_md(use_vector=(not fast_local))
         print(json.dumps(res, indent=2))
         return
     if len(sys.argv) > 1 and sys.argv[1] in {"--emit-launchd-plist", "-L"}:
@@ -601,7 +650,7 @@ def main():
             f.write(plist)
         print(json.dumps({"ok": True, "label": label, "plist_path": plist_path, "interval_sec": interval}, indent=2))
         return
-    # Default: run update
+    # Default: run update (vector enabled by env)
     res = update_claude_md()
     print(json.dumps(res, indent=2))
 

@@ -89,3 +89,23 @@ When reviewing or implementing code, always consider the broader payment flow, e
 - When to use: at payments integration planning, when recurring payment issues arise, or before finalizing PCI-impacting changes.
 - How to search: `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per change set. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After payments work, emit a JSON DIGEST fence documenting flows and risk mitigations.
+
+Example:
+```json DIGEST
+{
+  "agent": "Stripe Expert",
+  "task_id": "<payments-task-id>",
+  "decisions": [
+    "Added webhook verification and idempotency keys",
+    "Implemented 3DS fallback and error handling"
+  ],
+  "files": [
+    { "path": "lib/payments/stripe.ts", "reason": "webhook + client updates" }
+  ],
+  "next": ["TA to add negative tests"],
+  "evidence": { "pci": "non-sensitive", "webhooks": "verified" }
+}
+```

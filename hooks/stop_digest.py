@@ -24,6 +24,18 @@ MAX_ATTEMPTS = int(os.environ.get("INGEST_MAX_ATTEMPTS", "6"))
 BACKOFF_BASE = float(os.environ.get("INGEST_BACKOFF_BASE", "5"))  # seconds
 BACKOFF_CAP  = float(os.environ.get("INGEST_BACKOFF_CAP", "900"))  # 15 minutes
 
+# Stop-hook performance tuning (env toggles)
+# - STOP_TAIL_WINDOW_BYTES: how many bytes to tail-read from transcript (default 512KB)
+# - STOP_HOOK_MAX_TRANSCRIPT_BYTES: if transcript exceeds this, avoid full parse unless overridden
+# - STOP_TAIL_FAST_ONLY: if true, only tail-scan; skip full parse when no tail DIGEST
+# - STOP_DEBUG: gate verbose debug logging (default true to preserve current behavior)
+# - STOP_TIME_BUDGET_MS: soft time budget; if set (>0) and exceeded before finding DIGEST, exit early
+STOP_TAIL_WINDOW_BYTES = int(os.environ.get("STOP_TAIL_WINDOW_BYTES", str(512 * 1024)))
+STOP_HOOK_MAX_TRANSCRIPT_BYTES = int(os.environ.get("STOP_HOOK_MAX_TRANSCRIPT_BYTES", str(512 * 1024)))
+STOP_TAIL_FAST_ONLY = os.environ.get("STOP_TAIL_FAST_ONLY", "false").lower() == "true"
+STOP_DEBUG = os.environ.get("STOP_DEBUG", "true").lower() == "true"
+STOP_TIME_BUDGET_MS = int(os.environ.get("STOP_TIME_BUDGET_MS", "0"))  # 0 disables
+
 # Per-project logs by default; allow override via LOGS_DIR
 # This aligns debug logs with NOTES.md by default for easier discovery.
 DEFAULT_LOGS_DIR = os.path.join(CLAUDE_DIR, "logs")
@@ -141,6 +153,18 @@ def extract_digest_from_text(text):
         return json.loads(m.group(1))
     except Exception:
         return None
+
+def _now_iso():
+    return datetime.now().isoformat()
+
+def _log(debug_log_path, msg):
+    if not STOP_DEBUG:
+        return
+    try:
+        with open(debug_log_path, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
 
 def extract_latest_digest_from_transcript(transcript, debug_log_path=None):
     """
@@ -1162,32 +1186,119 @@ def main():
 
     # Debug: Log that Stop hook was triggered
     debug_log = os.path.join(LOGS_DIR, "stop_hook_debug.log")
-    with open(debug_log, "a") as f:
-        f.write(f"\n[{datetime.now().isoformat()}] Stop hook triggered\n")
+    if STOP_DEBUG:
+        _log(debug_log, f"\n[{_now_iso()}] Stop hook triggered")
+
+    # Track time budget for the stop hook
+    start_ts = time.time()
 
     # The Stop hook input varies; we expect at least the final assistant text under one of these keys.
     raw = sys.stdin.read()
 
     # Debug: Log payload keys
-    with open(debug_log, "a") as f:
-        f.write(f"Raw input length: {len(raw)} bytes\n")
+    if STOP_DEBUG:
+        _log(debug_log, f"Raw input length: {len(raw)} bytes")
 
     try:
         payload = json.loads(raw)
-        with open(debug_log, "a") as f:
-            f.write(f"Payload keys: {list(payload.keys())}\n")
+        if STOP_DEBUG:
+            _log(debug_log, f"Payload keys: {list(payload.keys())}")
     except Exception as e:
-        with open(debug_log, "a") as f:
-            f.write(f"JSON parse error: {e}\n")
+        if STOP_DEBUG:
+            _log(debug_log, f"JSON parse error: {e}")
         print("Stop hook: invalid JSON payload", file=sys.stderr)
         sys.exit(1)
 
-    # Extract assistant text from transcript file if available
-    text = ""
+    # Fast path: check payload text for DIGEST before any transcript I/O
+    text = (
+        payload.get("assistant_text")
+        or payload.get("final_message")
+        or payload.get("content")
+        or ""
+    )
+    digest = None
+    if text:
+        digest = extract_digest_from_text(text)
+        if digest:
+            if STOP_DEBUG:
+                _log(debug_log, "⚡ Fast DIGEST path: found in payload text")
+            try:
+                append_notes(digest, None, debug_log_path=(debug_log if STOP_DEBUG else None))
+                refresh_wsi(digest, None)
+                job_path = enqueue_digest_job(digest, debug_log if STOP_DEBUG else None)
+                if STOP_DEBUG:
+                    _log(debug_log, f"✅ Wrote NOTES/WSI; queued job: {os.path.basename(job_path) if job_path else 'none'}")
+                # Fire-and-forget: project status update (respect protections)
+                try:
+                    disable = os.environ.get("DISABLE_CLAUDE_MD_UPDATE", "false").lower() == "true"
+                    is_global = os.path.realpath(PROJECT_ROOT) == os.path.realpath(os.path.expanduser("~/.claude"))
+                    allow_global = os.environ.get("ALLOW_GLOBAL_CLAUDE_MD_UPDATE", "false").lower() == "true"
+                    if not disable and (not is_global or allow_global):
+                        subprocess.Popen(
+                            [sys.executable, os.path.join(os.path.dirname(__file__), 'project_status.py'), '--update-claude-md', '--fast-local'],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                except Exception:
+                    pass
+                sys.exit(0)
+            except Exception:
+                # If anything fails here, fall through to transcript scan
+                pass
     transcript_path = payload.get("transcript_path")
 
     if transcript_path and os.path.exists(transcript_path):
         try:
+            # Fast path: tail-scan large transcripts to find DIGEST without loading entire file
+            try:
+                fsize = os.path.getsize(transcript_path)
+            except Exception:
+                fsize = 0
+            if fsize and fsize > STOP_TAIL_WINDOW_BYTES:
+                try:
+                    with open(transcript_path, "rb") as tf:
+                        tf.seek(max(0, fsize - STOP_TAIL_WINDOW_BYTES))
+                        tail_bytes = tf.read()
+                    tail_text = tail_bytes.decode("utf-8", errors="ignore")
+                    m_fast = DIGEST_RE.search(tail_text)
+                    if m_fast:
+                        try:
+                            fast_digest = json.loads(m_fast.group(1))
+                            if STOP_DEBUG:
+                                _log(debug_log, f"⚡ Fast DIGEST path: found in tail (size={fsize} bytes, window={STOP_TAIL_WINDOW_BYTES})")
+                            # Process immediately and exit to keep Stop hook fast
+                            append_notes(fast_digest, None, debug_log_path=(debug_log if STOP_DEBUG else None))
+                            refresh_wsi(fast_digest, None)
+                            job_path = enqueue_digest_job(fast_digest, debug_log if STOP_DEBUG else None)
+                            if STOP_DEBUG:
+                                _log(debug_log, f"✅ Wrote NOTES/WSI; queued job: {os.path.basename(job_path) if job_path else 'none'}")
+                            # Fire-and-forget: fast-local project status update (respects global protection)
+                            try:
+                                disable = os.environ.get("DISABLE_CLAUDE_MD_UPDATE", "false").lower() == "true"
+                                is_global = os.path.realpath(PROJECT_ROOT) == os.path.realpath(os.path.expanduser("~/.claude"))
+                                allow_global = os.environ.get("ALLOW_GLOBAL_CLAUDE_MD_UPDATE", "false").lower() == "true"
+                                if not disable and (not is_global or allow_global):
+                                    subprocess.Popen(
+                                        [sys.executable, os.path.join(os.path.dirname(__file__), 'project_status.py'), '--update-claude-md', '--fast-local'],
+                                        stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL,
+                                    )
+                            except Exception:
+                                pass
+                            sys.exit(0)
+                        except Exception:
+                            # Fall through to full parse
+                            pass
+                except Exception:
+                    # Fall through to full parse on any error
+                    pass
+            # Skip full parse for very large transcripts when configured
+            if (
+                fsize and STOP_TAIL_FAST_ONLY and STOP_HOOK_MAX_TRANSCRIPT_BYTES and fsize > STOP_HOOK_MAX_TRANSCRIPT_BYTES
+            ):
+                if STOP_DEBUG:
+                    _log(debug_log, f"⏭️  Skipping full transcript parse (size={fsize} > limit={STOP_HOOK_MAX_TRANSCRIPT_BYTES})")
+                sys.exit(0)
             # Transcript can be either JSON array or JSONL (one JSON per line)
             with open(transcript_path, "r", encoding="utf-8") as f:
                 content = f.read().strip()
@@ -1205,57 +1316,61 @@ def main():
                         except:
                             pass
 
-            # Extract assistant messages
+            # Extract assistant messages, scanning from the end for fastest DIGEST detection
             # Claude Code format: messages have "type": "assistant" and "message": {"content": [...]}
             assistant_messages = []
             type_counts = {}  # Track what types we see
 
+            found_inline_digest = False
             if isinstance(transcript, list):
-                for msg in transcript:
+                for msg in reversed(transcript):
                     if isinstance(msg, dict):
                         msg_type = msg.get("type", "unknown")
                         type_counts[msg_type] = type_counts.get(msg_type, 0) + 1
 
                         if msg_type == "assistant":
-                            # Extract from message.content array
                             message_obj = msg.get("message", {})
                             content_blocks = message_obj.get("content", [])
-
                             if isinstance(content_blocks, list):
                                 text_parts = []
                                 for block in content_blocks:
                                     if isinstance(block, dict) and block.get("type") == "text":
                                         text_parts.append(block.get("text", ""))
                                 if text_parts:
-                                    assistant_messages.append("\n".join(text_parts))
+                                    combined = "\n".join(text_parts)
+                                    # Try to parse DIGEST quickly from the most recent assistant message
+                                    m_inline = DIGEST_RE.search(combined)
+                                    if m_inline:
+                                        try:
+                                            digest = json.loads(m_inline.group(1))
+                                            text = combined
+                                            found_inline_digest = True
+                                            break
+                                        except Exception:
+                                            pass
+                                    assistant_messages.append(combined)
 
-            if assistant_messages:
-                text = assistant_messages[-1]  # Last assistant message (for logging/fallback)
+            if not found_inline_digest and assistant_messages:
+                # Fallback to most recent assistant message text
+                text = assistant_messages[0]
 
-            with open(debug_log, "a") as f:
-                f.write(f"📄 Read transcript: {len(transcript)} messages\n")
-                f.write(f"   Type distribution: {type_counts}\n")
-                f.write(f"   Assistant messages: {len(assistant_messages)}\n")
-                f.write(f"   Last assistant message length: {len(text)}\n")
-
-                # Sample first few messages for structure debugging
-                if len(transcript) > 0:
+            if STOP_DEBUG:
+                _log(debug_log, f"📄 Read transcript: {len(transcript)} messages")
+                _log(debug_log, f"   Type distribution: {type_counts}")
+                _log(debug_log, f"   Assistant messages: {len(assistant_messages)}")
+                _log(debug_log, f"   Last assistant message length: {len(text)}")
+                if 'fsize' in locals() and fsize and fsize <= 2 * STOP_TAIL_WINDOW_BYTES and len(transcript) > 0:
                     sample = transcript[0] if len(transcript) > 0 else {}
-                    f.write(f"   Sample message keys: {list(sample.keys()) if isinstance(sample, dict) else 'not a dict'}\n")
+                    _log(debug_log, f"   Sample message keys: {list(sample.keys()) if isinstance(sample, dict) else 'not a dict'}")
 
         except Exception as e:
-            with open(debug_log, "a") as f:
-                f.write(f"⚠️  Failed to read transcript: {e}\n")
+            if STOP_DEBUG:
+                _log(debug_log, f"⚠️  Failed to read transcript: {e}")
     else:
         # Fallback to direct payload keys (legacy/testing)
-        text = (
-            payload.get("assistant_text")
-            or payload.get("final_message")
-            or payload.get("content")
-            or ""
-        )
-        with open(debug_log, "a") as f:
-            f.write(f"⚠️  No transcript_path, using fallback (text length: {len(text)})\n")
+        # 'text' already set from payload earlier
+        if STOP_DEBUG:
+            _log(debug_log, f"⚠️  No transcript_path, using fallback (text length: {len(text)})")
 
     # Prefer: scan entire transcript for most recent DIGEST; fallback to last text
     digest = None
@@ -1267,14 +1382,22 @@ def main():
     if not digest:
         digest = extract_digest_from_text(text)
 
+    # Time budget guard: if configured and no digest found yet, exit early
+    if not digest and STOP_TIME_BUDGET_MS > 0:
+        elapsed_ms = int((time.time() - start_ts) * 1000)
+        if elapsed_ms >= STOP_TIME_BUDGET_MS:
+            if STOP_DEBUG:
+                _log(debug_log, f"⏱️  Exiting early due to time budget ({elapsed_ms}ms >= {STOP_TIME_BUDGET_MS}ms)")
+            sys.exit(0)
+
     # Debug: Log digest detection
-    with open(debug_log, "a") as f:
+    if STOP_DEBUG:
         if digest:
-            f.write(f"✅ DIGEST found: agent={digest.get('agent')}, task={digest.get('task_id')}\n")
-            f.write(f"   Writing to: {NOTES_PATH}\n")
-            f.write(f"   WSI path: {WSI_PATH}\n")
+            _log(debug_log, f"✅ DIGEST found: agent={digest.get('agent')}, task={digest.get('task_id')}")
+            _log(debug_log, f"   Writing to: {NOTES_PATH}")
+            _log(debug_log, f"   WSI path: {WSI_PATH}")
         else:
-            f.write(f"ℹ️  No DIGEST block found in assistant text (length: {len(text)})\n")
+            _log(debug_log, f"ℹ️  No DIGEST block found in assistant text (length: {len(text)})")
 
     if not digest:
         # Not all turns will have a digest; don't fail noisily.
@@ -1286,55 +1409,77 @@ def main():
         rag_suggestions = None
         enable_rag = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"
 
-        with open(debug_log, "a") as f:
+        if STOP_DEBUG:
             if enable_rag:
-                f.write(f"ℹ️  RAG enabled - will ingest after writing NOTES.md\n")
+                _log(debug_log, "ℹ️  RAG enabled - will ingest after writing NOTES.md")
             else:
-                f.write(f"ℹ️  RAG disabled (set ENABLE_VECTOR_RAG=true to enable)\n")
+                _log(debug_log, "ℹ️  RAG disabled (set ENABLE_VECTOR_RAG=true to enable)")
 
         # Write NOTES.md and WSI immediately (fast, critical)
-        with open(debug_log, "a") as f:
-            f.write(f"📝 About to call append_notes...\n")
+        if STOP_DEBUG:
+            _log(debug_log, "📝 About to call append_notes...")
         try:
-            append_notes(digest, rag_suggestions, debug_log_path=debug_log)
-            with open(debug_log, "a") as f:
-                f.write(f"📝 append_notes completed\n")
+            append_notes(digest, rag_suggestions, debug_log_path=(debug_log if STOP_DEBUG else None))
+            if STOP_DEBUG:
+                _log(debug_log, "📝 append_notes completed")
         except Exception as e:
-            with open(debug_log, "a") as f:
-                f.write(f"❌ append_notes failed: {e}\n")
+            if STOP_DEBUG:
+                _log(debug_log, f"❌ append_notes failed: {e}")
             raise
 
-        with open(debug_log, "a") as f:
-            f.write(f"📝 About to call refresh_wsi...\n")
+        if STOP_DEBUG:
+            _log(debug_log, "📝 About to call refresh_wsi...")
         try:
             refresh_wsi(digest, rag_suggestions)
-            with open(debug_log, "a") as f:
-                f.write(f"📝 refresh_wsi completed\n")
+            if STOP_DEBUG:
+                _log(debug_log, "📝 refresh_wsi completed")
         except Exception as e:
-            with open(debug_log, "a") as f:
-                f.write(f"❌ refresh_wsi failed: {e}\n")
+            if STOP_DEBUG:
+                _log(debug_log, f"❌ refresh_wsi failed: {e}")
             raise
 
         # Enqueue this digest for ingestion (always)
-        job_path = enqueue_digest_job(digest, debug_log)
+        job_path = enqueue_digest_job(digest, debug_log if STOP_DEBUG else None)
 
         # Skip queue processing in Stop hook to avoid timeout
         # Let the launchd queue processor agent handle all ingestion (every 15 min)
         # This keeps Stop hook fast (<1s) and prevents cancellation
         q_summary = {"processed": 0, "succeeded": 0, "failed": 0, "skipped_no_creds": 0}
 
-        with open(debug_log, "a") as f:
-            f.write(f"✅ Successfully wrote NOTES and refreshed WSI\n")
+        if STOP_DEBUG:
+            _log(debug_log, "✅ Successfully wrote NOTES and refreshed WSI")
             if job_path:
-                f.write(f"   📌 Ingest job queued: {os.path.basename(job_path)}\n")
-            f.write(f"   ⏩ Queue processing deferred to launchd agent (prevents Stop hook timeout)\n")
+                _log(debug_log, f"   📌 Ingest job queued: {os.path.basename(job_path)}")
+            _log(debug_log, "   ⏩ Queue processing deferred to launchd agent (prevents Stop hook timeout)")
+
+        # Fire-and-forget: update CLAUDE.md <project_status> (fast-local, no vector)
+        # Respect opt-out and do not touch global ~/.claude unless explicitly allowed
+        try:
+            disable = os.environ.get("DISABLE_CLAUDE_MD_UPDATE", "false").lower() == "true"
+            is_global = os.path.realpath(PROJECT_ROOT) == os.path.realpath(os.path.expanduser("~/.claude"))
+            allow_global = os.environ.get("ALLOW_GLOBAL_CLAUDE_MD_UPDATE", "false").lower() == "true"
+            if not disable and (not is_global or allow_global):
+                subprocess.Popen(
+                    [sys.executable, os.path.join(os.path.dirname(__file__), 'project_status.py'), '--update-claude-md', '--fast-local'],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                if STOP_DEBUG:
+                    _log(debug_log, "🧭 Triggered CLAUDE.md project status update (fast-local)")
+            else:
+                if STOP_DEBUG:
+                    reason = "env opt-out" if disable else "global root protected"
+                    _log(debug_log, f"🛑 Skipped CLAUDE.md status update ({reason})")
+        except Exception as e:
+            if STOP_DEBUG:
+                _log(debug_log, f"⚠️  Failed to trigger CLAUDE.md update: {e}")
 
         # Call PM decision hook if enabled
         # This allows GPT-5 to make strategic decisions when agent encounters decision points
         enable_pm = os.environ.get("ENABLE_PM_AGENT", "false").lower() == "true"
         if enable_pm and text:
-            with open(debug_log, "a") as f:
-                f.write(f"🤖 PM Agent enabled - checking for decision points...\n")
+            if STOP_DEBUG:
+                _log(debug_log, "🤖 PM Agent enabled - checking for decision points...")
             try:
                 pm_hook_path = os.path.join(os.path.dirname(__file__), "pm_decision_hook.py")
                 # Pass last message text to PM hook (don't block on it - run async)
@@ -1352,11 +1497,11 @@ def main():
                     "digest": digest,
                     "debug_log": debug_log
                 })
-                with open(debug_log, "a") as f:
-                    f.write(f"   ✅ PM hook spawned (async)\n")
+                if STOP_DEBUG:
+                    _log(debug_log, "   ✅ PM hook spawned (async)")
             except Exception as e:
-                with open(debug_log, "a") as f:
-                    f.write(f"   ⚠️  PM hook failed: {e}\n")
+                if STOP_DEBUG:
+                    _log(debug_log, f"   ⚠️  PM hook failed: {e}")
 
         # Show user-visible warning if credentials are missing (check via env var instead)
         enable_rag = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"
@@ -1370,8 +1515,8 @@ def main():
                 file=sys.stderr
             )
     except Exception as e:
-        with open(debug_log, "a") as f:
-            f.write(f"❌ Error writing NOTES/WSI: {e}\n")
+        if STOP_DEBUG:
+            _log(debug_log, f"❌ Error writing NOTES/WSI: {e}")
         print(f"Stop hook: failed to write NOTES/WSI: {e}", file=sys.stderr)
         sys.exit(1)
 

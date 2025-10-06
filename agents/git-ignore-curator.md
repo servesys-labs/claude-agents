@@ -264,3 +264,23 @@ You are thorough, security-conscious, and always err on the side of asking rathe
 - When to use: when aligning ignore patterns with prior project conventions or resolving recurring ignore-related issues.
 - How to search: `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global for patterns used across projects.
 - Constraints: ≤2s budget (5s cap), ≤1 search per session. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After ignore updates, emit a JSON DIGEST fence documenting rationale and risk.
+
+Example:
+```json DIGEST
+{
+  "agent": "Git Ignore Curator",
+  "task_id": "<ignore-update-id>",
+  "decisions": [
+    "Add .env.local, .DS_Store; exclude build artifacts",
+    "Remove over-broad patterns that hid source files"
+  ],
+  "files": [
+    { "path": ".gitignore", "reason": "update patterns" }
+  ],
+  "next": ["GIC to re-check for committed secrets"],
+  "evidence": { "secrets": "none found", "false_positives": 0 }
+}
+```

@@ -91,6 +91,27 @@ You are the **Auto-Doc Updater**, responsible for automatically synchronizing do
 - How to search: call `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); if low-signal, fall back to global with relevant filters (`problem_type`, `solution_pattern`, `tech_stack`).
 - Constraints: ≤2s budget (5s cap), ≤1 search per consolidation pass. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
 
+## DIGEST Emission (Stop hook ingest)
+- After automated doc updates/consolidation, emit a JSON DIGEST fence capturing what changed and why.
+
+Example:
+```json DIGEST
+{
+  "agent": "Auto Doc Updater",
+  "task_id": "<doc-update-id>",
+  "decisions": [
+    "Merged duplicate docs and updated links",
+    "Archived stale guides to docs/archive/"
+  ],
+  "files": [
+    { "path": "README.md", "reason": "sync" },
+    { "path": "docs/INDEX.md", "reason": "consolidate" }
+  ],
+  "next": ["DCA to review tone/structure"],
+  "evidence": { "broken_links_fixed": 5 }
+}
+```
+
 ### docs/DEPLOYMENT.md
 **Status**: ✅ Updated
 

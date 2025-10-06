@@ -124,3 +124,23 @@ You are the guardian of API quality and long-term maintainability. Every contrac
 - When to use: at design kickoff, when similar API decisions exist, before risky changes (breaking versioning, contracts), and before finalizing API designs.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`, `global: false`); if low-signal, fall back to global (`project_root: null`, `global: true`) with filters (`problem_type`, `solution_pattern`, `tech_stack`).
 - Constraints: ≤2s budget (5s cap), ≤1 search per phase. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After API design/review, emit a JSON DIGEST fence that captures decisions and compatibility notes.
+
+Example:
+```json DIGEST
+{
+  "agent": "API Architect",
+  "task_id": "<api-change-id>",
+  "decisions": [
+    "Add GET /v1/users/{id}/profiles (additive)",
+    "Deprecate field 'age' in v1; new 'birthDate' (optional)"
+  ],
+  "files": [
+    { "path": "openapi.yaml", "reason": "spec update" }
+  ],
+  "next": ["IE to implement endpoints", "TA to add contract tests"],
+  "evidence": { "versioning": "v1 additive", "breaking": false }
+}
+```

@@ -345,3 +345,23 @@ Transform the web into compact, context-efficient knowledge. Never flood the con
 - When to use: before summarizing to align with prior decisions/terminology or to fetch related past synthesis.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per summarization session. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After summarization, emit a JSON DIGEST fence with key findings and links.
+
+Example:
+```json DIGEST
+{
+  "agent": "Web Content Summarizer",
+  "task_id": "<summary-id>",
+  "decisions": [
+    "Condensed 5 sources into actionable bullets",
+    "Aligned terminology with existing docs"
+  ],
+  "files": [
+    { "path": "", "reason": "summary only" }
+  ],
+  "next": ["IE to apply relevant changes"],
+  "evidence": { "sources": 5 }
+}
+```

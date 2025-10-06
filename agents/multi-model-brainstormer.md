@@ -377,3 +377,23 @@ Facilitate the conversation. Extract the wisdom. Synthesize the insights. Make s
 - When to use: at brainstorming kickoff to surface prior decisions and outcomes relevant to the problem space.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); if low-signal, fall back to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per brainstorm. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After a brainstorm, emit a JSON DIGEST fence capturing the synthesized recommendation and key trade-offs.
+
+Example:
+```json DIGEST
+{
+  "agent": "Multi-Model Brainstormer",
+  "task_id": "<brainstorm-id>",
+  "decisions": [
+    "Hybrid approach chosen after model convergence",
+    "Key trade-off: SSE vs WebSocket; default to SSE"
+  ],
+  "files": [
+    { "path": "", "reason": "planning only" }
+  ],
+  "next": ["IPSA to incorporate plan"],
+  "evidence": { "convergence": "high", "rounds": 3 }
+}
+```

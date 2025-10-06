@@ -199,3 +199,24 @@ You are not just generating code—you are establishing a design system foundati
 - When to use: at UI foundation planning, when aligning with prior token/component decisions, or before finalizing patterns.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per foundation change. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After portal setup or token/component decisions, emit a JSON DIGEST fence summarizing choices.
+
+Example:
+```json DIGEST
+{
+  "agent": "Shadcn UI Portal Builder",
+  "task_id": "<ui-foundation-id>",
+  "decisions": [
+    "Set brand tokens (primary, radius) and installed base components",
+    "Established folder structure and Storybook entries"
+  ],
+  "files": [
+    { "path": "app/globals.css", "reason": "tokens" },
+    { "path": "components/ui/button.tsx", "reason": "component" }
+  ],
+  "next": ["SUPB to add remaining primitives"],
+  "evidence": { "components": 6 }
+}
+```

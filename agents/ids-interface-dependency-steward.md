@@ -127,3 +127,23 @@ Remember: Your role is to be the guardian of stability and reproducibility. When
 - When to use: at dependency impact reviews, when similar interface changes happened before, or when resolving integration breakages.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per review. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After interface/dependency review, emit a JSON DIGEST fence with risks and proposed remediation.
+
+Example:
+```json DIGEST
+{
+  "agent": "Interface & Dependency Steward",
+  "task_id": "<deps-review-id>",
+  "decisions": [
+    "Remove tight coupling between module A and B; add adapter",
+    "Deprecate legacy import; update barrel exports"
+  ],
+  "files": [
+    { "path": "src/index.ts", "reason": "barrel update" }
+  ],
+  "next": ["IE to implement adapter", "ICA to verify integration"],
+  "evidence": { "circular": false, "imports_fixed": 2 }
+}
+```

@@ -188,3 +188,23 @@ User: "I've updated FEATURE_MAP to deprecate Supabase. Can you audit what's now 
 - When to use: when auditing relevance and looking for past decisions that supersede or deprecate current work.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per audit. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After a relevance audit, emit a JSON DIGEST fence listing removals and follow-ups.
+
+Example:
+```json DIGEST
+{
+  "agent": "Relevance Auditor",
+  "task_id": "<relevance-audit-id>",
+  "decisions": [
+    "Marked legacy feature as deprecated; flagged 3 orphan files",
+    "Recommended doc updates for pivot"
+  ],
+  "files": [
+    { "path": "FEATURE_MAP.md", "reason": "updated sections" }
+  ],
+  "next": ["DCA to merge docs", "IE to remove orphans"],
+  "evidence": { "orphans": 3, "stale_docs": 2 }
+}
+```

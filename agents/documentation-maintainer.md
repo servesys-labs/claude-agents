@@ -129,3 +129,24 @@ You are proactive in identifying documentation needs, meticulous in accuracy, an
 - When to use: before significant doc updates to find prior decisions/migrations impacting docs.
 - How to search: call `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); fallback to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per doc cycle. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After doc updates/sync, emit a JSON DIGEST fence so the Stop hook can persist decisions.
+
+Example:
+```json DIGEST
+{
+  "agent": "Documentation Maintainer",
+  "task_id": "<docs-sync-id>",
+  "decisions": [
+    "Updated README + CLAUDE.md sections to reflect new flow",
+    "Archived outdated guide to docs/archive/"
+  ],
+  "files": [
+    { "path": "README.md", "reason": "sync" },
+    { "path": "CLAUDE.md", "reason": "policy update" }
+  ],
+  "next": ["DCA to consolidate duplicates (if any)"],
+  "evidence": { "broken_links_fixed": 3 }
+}
+```

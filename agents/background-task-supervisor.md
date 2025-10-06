@@ -353,3 +353,23 @@ Keep the Main Agent unblocked. Run tasks. Emit summaries. Yield control quickly 
 - When to use: at task kickoff, when scheduling patterns or recurring failures resemble past incidents, or before finalizing retry/backoff policies.
 - How to search: prefer local `mcp__vector-bridge__memory_search` (`project_root`=this project, `k: 3`); fallback to global with filters as needed.
 - Constraints: ≤2s budget (5s cap), ≤1 search per orchestration cycle. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After supervising a background task or workflow, emit a JSON DIGEST fence with outcomes and handles.
+
+Example:
+```json DIGEST
+{
+  "agent": "Background Task Supervisor",
+  "task_id": "<btm-task-id>",
+  "decisions": [
+    "Spawned build task BTM-123; monitored until success",
+    "Configured backoff and alert on failure"
+  ],
+  "files": [
+    { "path": "", "reason": "coordination only" }
+  ],
+  "next": ["PRV to validate artifacts"],
+  "evidence": { "btm_handle": "BTM-123", "duration_sec": 420 }
+}
+```

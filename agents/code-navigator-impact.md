@@ -173,3 +173,23 @@ You are the critical checkpoint between planning and implementation. Your thorou
 - When to use: at impact analysis kickoff, when similar changes have occurred before, or when identifying hidden dependencies.
 - How to search: run `mcp__vector-bridge__memory_search` locally first (`project_root`=this project, `k: 3`); if low-signal, fall back to global with filters.
 - Constraints: ≤2s budget (5s cap), ≤1 search per analysis. Treat results as hints; prefer recent, validated outcomes. Skip if slow/empty.
+
+## DIGEST Emission (Stop hook ingest)
+- After change map/impact report, emit a JSON DIGEST fence summarizing change points and risks.
+
+Example:
+```json DIGEST
+{
+  "agent": "Code Navigator",
+  "task_id": "<change-map-id>",
+  "decisions": [
+    "Change points: 3 modules; safest order: repo → service → API",
+    "Risk: circular dependency in utils; propose extraction"
+  ],
+  "files": [
+    { "path": "src/repo/userRepo.ts", "reason": "call graph hotspot" }
+  ],
+  "next": ["IE to implement minimal diffs", "IDS to verify dependencies"],
+  "evidence": { "touch_budget": 8 }
+}
+```
