@@ -759,25 +759,10 @@ This updates the success rate for future recommendations.
 5. **Update Success Rates**: Always call `solution_apply` after using a fixpack
 6. **Avoid Duplication**: Search existing fixpacks before creating new ones
 
-### Example Workflow
-
-```
-User encounters error: "sh: tsc: not found"
-↓
-Main Agent uses solution_search("sh: tsc: not found", category: "build")
-↓
-Finds: "Railway TypeScript build fails - tsc not found" (78% match)
-↓
-Presents remediation steps:
-1. Convert to multi-stage Docker build
-2. Commit and push to trigger rebuild
-↓
-User applies fix (or Main Agent with IE agent)
-↓
-Main Agent calls solution_apply(solution_id: 15, success: true)
-↓
-Success rate updated: 67% → 71%
-```
+### Example Workflow (Brief)
+- Error occurs → call `solution_search(error_message)`
+- Review `solution_preview(solution_id)` (DRY‑RUN)
+- Apply steps manually → record outcome with `solution_apply`
 
 ### Integration Points
 
@@ -810,34 +795,9 @@ The **Vector Bridge MCP Server** provides global vector memory across all projec
 - **PostgreSQL**: Railway production (remote)
 - **Redis**: `redis://localhost:6379` (local instance)
 
-### Available Tools
-
-**1. memory_ingest**
-- Ingest documents into global vector store
-- Auto-chunks text, generates embeddings, stores with metadata
-- Returns: chunks created, project_id
-
-**2. memory_search**
-- Semantic search across project or globally
-- Vector similarity using cosine distance
-- Returns: ranked results with scores, metadata
-
-**3. memory_projects**
-- List all indexed projects with statistics
-- Shows document count, last updated
-
-**4. solution_search**
-- Find fixpacks matching error messages
-- Vector semantic search + regex patterns
-- Returns: ranked solutions with remediation steps
-
-**5. solution_apply**
-- Record fixpack application success/failure
-- Updates success rate tracking
-
-**6. solution_upsert**
-- Create new fixpacks programmatically
-- Alternative to manual JSON files
+### Available Tools (Summary)
+- memory_ingest, memory_search, memory_projects
+- solution_search, solution_preview, solution_apply, solution_upsert
 
 ### Configuration
 
@@ -932,67 +892,14 @@ Auto-deploys via Railway when pushed to main.
 ⸻
 
 <mcp_configuration_strategy>
-## 🔧 MCP Configuration Strategy
+## 🔧 MCP Configuration Strategy (Summary)
 
-### Global-Only Configuration (User Preference)
+Guidelines:
+- Prefer user scope (`~/.claude.json`) for global MCP servers; use project `<repo>/.mcp.json` only when needed
+- Provide real env values or set OS env via `launchctl setenv` on macOS GUI
+- Use absolute Node path in `.mcp.json`
 
-**All MCP servers are configured globally in `~/.claude.json`:**
-- ✅ **Single source of truth** for all MCP servers
-- ✅ **No per-project configuration** needed
-- ✅ **Credentials in one secure location**
-- ✅ **Consistent tools across all projects**
-
-**Project-level `.mcp.json` files are NOT used** for this user's workflow.
-
-### Current Setup (2025-10-06)
-
-**Global Config (`~/.claude.json`):**
-```json
-{
-  "mcpServers": {
-    "vector-bridge": { /* global vector memory */ },
-    "openai-bridge": { /* GPT-5 integration */ },
-    "perplexity-ask": { /* live web search */ },
-    "gemini-bridge": { /* Gemini integration */ },
-    "github-bridge": { /* GitHub API */ },
-    "browser-automation": { /* Playwright */ },
-    "monitoring-bridge": { /* Railway/infra */ }
-  }
-}
-```
-
-**Project Config Template (`~/.claude/mcp-template.json`):**
-```json
-{
-  "mcpServers": {},
-  "_comment": "NOT USED - All MCP servers are configured globally in ~/.claude.json"
-}
-```
-
-### Automation (auto_project_setup.py)
-
-The `auto_project_setup.py` hook automatically creates empty `.mcp.json` files in new projects. This ensures:
-- ✅ All MCP servers loaded from global `~/.claude.json`
-- ✅ No per-project MCP configuration
-- ✅ Single source of truth for all tools
-- ✅ No risk of credential duplication or drift
-
-**Important**: Project `.mcp.json` files are intentionally empty. All MCP servers (vector-bridge, openai-bridge, etc.) are configured globally to avoid:
-- ❌ Credential duplication across repos
-- ❌ Configuration drift between projects
-- ❌ Accidentally committing secrets to git
-- ❌ Maintenance overhead of per-project configs
-
-### Troubleshooting
-
-**MCP tools not available?**
-1. Check global config: `cat ~/.claude.json | jq .mcpServers`
-2. Restart Claude Code (MCP servers load on startup)
-3. Verify credentials in environment: `env | grep -E "DATABASE_URL_MEMORY|REDIS_URL|OPENAI_API_KEY"`
-
-**Project-specific server conflicts?**
-- Remove duplicates from `.mcp.json`: `jq 'del(.mcpServers["vector-bridge"])' .mcp.json`
-- Global servers always take precedence
+See README.md → “MCP Configuration” for full details and troubleshooting.
 
 </mcp_configuration_strategy>
 

@@ -74,6 +74,15 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Edit|Write|MultiEdit|Task|Bash|Web(Search|Fetch)|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/hooks/routing_enforcer.py"
+          }
+        ]
+      },
+      {
         "matcher": "Write",
         "hooks": [
           {

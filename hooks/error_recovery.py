@@ -20,6 +20,12 @@ from pathlib import Path
 from datetime import datetime
 
 ERROR_LOG_DIR = Path.home() / "claude-hooks" / "logs" / "errors"
+# Fixpack/MCP integration toggles
+ENABLE_FIXPACK_SUGGEST = os.environ.get("ENABLE_FIXPACK_SUGGEST", "true").lower() == "true"
+FIXPACK_MAX_SUGGESTIONS = int(os.environ.get("FIXPACK_MAX_SUGGESTIONS", "2"))
+FIXPACK_SUGGEST_TIMEOUT_SEC = int(os.environ.get("FIXPACK_SUGGEST_TIMEOUT_SEC", "6"))
+# Auto-preview top suggestion (DRY-RUN) to speed decisions
+FIXPACK_AUTO_PREVIEW = os.environ.get("FIXPACK_AUTO_PREVIEW", "true").lower() == "true"
 RECOVERY_STRATEGIES = {
     "permission_denied": {
         "pattern": r"permission denied|not permitted|eacces",
@@ -259,6 +265,67 @@ def revert_recent_changes(hook_path: str, error_output: str) -> dict:
     }
 
 
+def _call_vector_bridge_mcp(tool_name: str, params: dict, timeout_sec: int) -> dict | None:
+    """Call vector-bridge MCP server via stdio. Fail-open on any error."""
+    try:
+        mcp_cmd = [
+            "node",
+            os.path.expanduser("~/.claude/mcp-servers/vector-bridge/dist/index.js"),
+        ]
+        init_request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "error-recovery", "version": "1.0.0"},
+            },
+        }
+        tool_request = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": params},
+        }
+        proc = subprocess.Popen(
+            mcp_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "DATABASE_URL_MEMORY": os.environ.get("DATABASE_URL_MEMORY", ""),
+                "REDIS_URL": os.environ.get("REDIS_URL", ""),
+                "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+            },
+        )
+        payload = f"{json.dumps(init_request)}\n{json.dumps(tool_request)}\n"
+        try:
+            stdout, stderr = proc.communicate(input=payload, timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return {"error": f"MCP call timed out after {timeout_sec}s"}
+        # Parse line-delimited JSON responses
+        for line in (stdout or "").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if obj.get("id") == 2:
+                return obj.get("result") or {}
+        return None
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def apply_recovery(error_type: str, strategy: dict, hook_path: str, error_output: str) -> dict:
     """Apply recovery strategy."""
     fix_function_name = strategy["fix"]
@@ -307,6 +374,70 @@ def main():
         print("=" * 60, file=sys.stderr)
         print("", file=sys.stderr)
         sys.exit(2)
+
+    # Optionally suggest fixpacks before attempting local recovery (non-blocking guidance)
+    if ENABLE_FIXPACK_SUGGEST and error_output:
+        try:
+            # Limit error message length to keep requests small
+            snippet = error_output[-2000:]
+            res = _call_vector_bridge_mcp(
+                "solution_search",
+                {"error_message": snippet, "limit": max(1, min(5, FIXPACK_MAX_SUGGESTIONS))},
+                timeout_sec=FIXPACK_SUGGEST_TIMEOUT_SEC,
+            )
+            text = None
+            if res and isinstance(res, dict):
+                content = res.get("content")
+                if isinstance(content, list) and content:
+                    first = content[0]
+                    if isinstance(first, dict):
+                        text = first.get("text")
+            if text:
+                print("", file=sys.stderr)
+                print("🧩 Suggested Fixpacks (from solution memory):", file=sys.stderr)
+                # Print only the first ~40 lines to keep hook output compact
+                lines = (text.splitlines() if isinstance(text, str) else [])
+                preview = "\n".join(lines[:40])
+                print(preview, file=sys.stderr)
+                if len(lines) > 40:
+                    print("… (truncated)", file=sys.stderr)
+
+                # Auto-preview the top suggestion in DRY-RUN mode (if enabled)
+                if FIXPACK_AUTO_PREVIEW:
+                    # Heuristic: extract first `solution_id=NNN` from the suggestion text
+                    m = re.search(r"solution_id\s*=\s*(\d+)", text)
+                    if not m:
+                        # Fallback: look for "Solution #NNN"
+                        m = re.search(r"Solution\s*#(\d+)", text, re.IGNORECASE)
+                    if m:
+                        sol_id = int(m.group(1))
+                        prev = _call_vector_bridge_mcp(
+                            "solution_preview",
+                            {"solution_id": sol_id},
+                            timeout_sec=max(6, FIXPACK_SUGGEST_TIMEOUT_SEC + 2),
+                        )
+                        prev_text = None
+                        if prev and isinstance(prev, dict):
+                            pc = prev.get("content")
+                            if isinstance(pc, list) and pc:
+                                pf = pc[0]
+                                if isinstance(pf, dict):
+                                    prev_text = pf.get("text")
+                        if prev_text:
+                            print("", file=sys.stderr)
+                            print(f"🔍 DRY-RUN Preview (solution_id={sol_id}):", file=sys.stderr)
+                            p_lines = prev_text.splitlines()
+                            p_head = "\n".join(p_lines[:40])
+                            print(p_head, file=sys.stderr)
+                            if len(p_lines) > 40:
+                                print("… (truncated)", file=sys.stderr)
+                            print("", file=sys.stderr)
+                            print("👉 To apply: manually execute the steps above, then call `mcp__vector-bridge__solution_apply` with { solution_id: "+str(sol_id)+", success: true|false }.", file=sys.stderr)
+                        else:
+                            print("", file=sys.stderr)
+                            print("(Could not preview solution steps; try `solution_preview` manually.)", file=sys.stderr)
+        except Exception:
+            pass
 
     # Attempt recovery
     print("", file=sys.stderr)

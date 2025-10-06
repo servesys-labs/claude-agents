@@ -2,7 +2,7 @@
 
 **Production-ready orchestration with Vector RAG Memory**
 
-**Version**: 1.4.0 | **[📖 Quick Start →](QUICK_START.md)** | **[⚡ 5-Minute Setup](#5-minute-setup-with-vector-rag)**
+**Version**: 1.4.0 | **[📖 Quick Start →](PM_QUICK_START.md)** | **[⚡ 5-Minute Setup](#5-minute-setup-with-vector-rag)**
 
 ---
 
@@ -217,7 +217,112 @@ bash smoke-test.sh
 ```
 
 **Comprehensive validation:**
-See [INSTALLATION_VALIDATION.md](INSTALLATION_VALIDATION.md) for detailed checklist and smoke tests.
+See MCP test notes in `MCP_TEST_REPORT.md` and try the sample tool flows.
+
+---
+
+## Operational Toggles (Hooks)
+
+Stop Hook Performance
+- `STOP_TAIL_WINDOW_BYTES` (default 524288): Tail bytes for fast DIGEST scan
+- `STOP_HOOK_MAX_TRANSCRIPT_BYTES` (default 524288): Skip full parse when huge (with `STOP_TAIL_FAST_ONLY=true`)
+- `STOP_TAIL_FAST_ONLY` (default false): Only tail-scan; do not full-parse if not found
+- `STOP_TIME_BUDGET_MS` (default 0): Soft cutoff; exit early if exceeded with no DIGEST
+- `STOP_DEBUG` (default true): Gate debug log writes
+
+Project Status Updater (CLAUDE.md)
+- `PROJECT_STATUS_COMPACT` (default false): compact header + Next Steps; hides decisions/risks
+- `PROJECT_STATUS_SHOW_DECISIONS` (default true)
+- `PROJECT_STATUS_SHOW_ACTIVITY` (default true)
+
+Vector Ingestion (Queue)
+- `ENABLE_VECTOR_RAG` (default false)
+- `INGEST_MCP_TIMEOUT_SEC` (default 60): memory_ingest timeout for MCP stdio
+- `INGEST_NONFATAL_ERRORS_PATTERN` (regex): treat transient errors as retryable (e.g., `timed out|ECONN|ETIMEDOUT`)
+
+Implementation Validator (IV)
+- `ENABLE_IV` (default false): spawn IV after Stop (non-blocking)
+- `IV_FAST_ONLY` (default true): local checks only
+- `IV_WRITE_NOTES` (default true): append compact IV note to NOTES.md
+
+---
+
+## Implementation Validator (IE → IV → TA)
+
+Fast, local validation that closes gaps before tests:
+- Reads last DIGEST from `.claude/logs/NOTES.md` and recent files from `.claude/logs/wsi.json`
+- Flags files listed in DIGEST that weren’t touched recently
+- Surfaces pending “Next Steps” to resolve before handing off to TA
+
+Enable: `export ENABLE_IV=true`
+
+Output:
+- WARNINGS.md entry if gaps exist
+- Compact IV note in NOTES.md with summary and actionable gaps
+
+---
+
+## Solution Memory (Fixpacks)
+
+Reusable, vector-searchable remediations for known errors.
+
+MCP tools (via `vector-bridge`):
+- `mcp__vector-bridge__solution_search` — find fixpacks by error message
+- `mcp__vector-bridge__solution_preview` — DRY‑RUN preview (no changes)
+- `mcp__vector-bridge__solution_apply` — record success/failure to track effectiveness
+
+Hook integration:
+- `hooks/error_recovery.py` auto‑suggests top fixpacks on hook failure and DRY‑RUN previews the first one
+
+Env toggles:
+- `ENABLE_FIXPACK_SUGGEST=true` (default)
+- `FIXPACK_MAX_SUGGESTIONS=2`
+- `FIXPACK_SUGGEST_TIMEOUT_SEC=6`
+- `FIXPACK_AUTO_PREVIEW=true`
+
+---
+
+## Project Status Updater (CLAUDE.md)
+
+Maintains a `<project_status>` block with:
+- Header: project, timestamp, data freshness (and reasons)
+- Summary: phase and optional focus component
+- Last Digest: agent, task, decisions/files counts
+- Next Steps: top items from recent work
+- Activity Snapshot: recent components
+
+Compact mode: `export PROJECT_STATUS_COMPACT=true`
+
+---
+
+## MCP Configuration
+
+Claude Code looks for MCP configs by scope:
+- User (all projects): `~/.claude.json`
+- Project (committable): `<repo>/.mcp.json`
+- Local (per project, private): still `~/.claude.json`, scoped to the active project
+
+Best practices:
+- Use an absolute Node path in `.mcp.json` (e.g., `/Users/you/.nvm/versions/node/v22/bin/node`)
+- Provide real env values (don’t rely on `${VAR}` expansion) or set OS env via `launchctl setenv`
+- To bootstrap per‑project: the auto-setup hook creates `.mcp.json` from `~/.claude/mcp-template.json` if missing
+
+Quick health check (stdio):
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"readme","version":"1.0"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+| OPENAI_API_KEY="$OPENAI_API_KEY" DATABASE_URL_MEMORY="$DATABASE_URL_MEMORY" REDIS_URL="$REDIS_URL" \
+  /Users/you/.nvm/versions/node/v22.15.0/bin/node ~/.claude/mcp-servers/vector-bridge/dist/index.js
+```
+
+---
+
+## Stop Hook Performance (large transcripts)
+
+To keep Stop fast on large transcripts:
+- Tail scan recent bytes first (`STOP_TAIL_WINDOW_BYTES`, default 512KB)
+- Optional fast‑only mode + size cap (`STOP_TAIL_FAST_ONLY=true`, `STOP_HOOK_MAX_TRANSCRIPT_BYTES`)
+- Early exit by time budget (`STOP_TIME_BUDGET_MS`)
+- Gate heavy debug I/O (`STOP_DEBUG=false`)
 
 ### 2. Set Up API Keys (Optional)
 For multi-model brainstorming and live data searches:

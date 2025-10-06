@@ -65,9 +65,9 @@ def extract_routing_decision(assistant_message: str) -> tuple[str | None, str | 
     Returns:
         (decision_type, reason) or (None, None) if not found
     """
-    # Look for "**Routing Decision**: ..."
-    pattern = r'\*\*Routing Decision\*\*:\s*\[(.*?)\](?:\s*-\s*(.*))?'
-    match = re.search(pattern, assistant_message)
+    # Look for "**Routing Decision**: ..." or plain "Routing Decision: ..." (case-insensitive)
+    pattern = r'(?:\*\*)?routing decision(?:\*\*)?:\s*\[(.*?)\](?:\s*-\s*(.*))?'
+    match = re.search(pattern, assistant_message or "", re.IGNORECASE)
 
     if match:
         decision_type = match.group(1).strip()
@@ -112,12 +112,14 @@ def main():
         # Invalid JSON, skip
         sys.exit(0)
 
-    # Only check on assistant messages (responses)
-    message_type = data.get("message_type")
-    if message_type != "assistant":
-        sys.exit(0)
-
-    assistant_message = data.get("message", "") or data.get("content", "")
+    # Extract assistant message content if available (PostToolUse may not include message_type)
+    assistant_message = (
+        data.get("assistant_text")
+        or data.get("message")
+        or data.get("content")
+        or data.get("final_message")
+        or ""
+    )
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
     file_path = tool_input.get("file_path", "")

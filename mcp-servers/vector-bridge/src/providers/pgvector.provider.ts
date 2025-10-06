@@ -260,16 +260,16 @@ export class PgVectorProvider implements MemoryProvider {
     let searchResult: SearchResult;
 
     if (global) {
-      // Global hybrid search across all projects
+      // Global hybrid search across all projects with feedback
       const result = await this.pool.query(
-        `SELECT * FROM search_hybrid_global($1::vector, $2, $3, $4, $5, $6)`,
+        `SELECT * FROM search_hybrid_global_with_feedback($1::vector, $2, $3, $4, $5, $6)`,
         [
           `[${queryEmbedding.join(',')}]`,
           query, // query text for BM25
           limit,
           0.6, // vector weight
           0.3, // BM25 weight
-          0.1, // time decay weight
+          0.1, // time decay weight (feedback weight is 15% in SQL function)
         ]
       );
 
@@ -294,6 +294,7 @@ export class PgVectorProvider implements MemoryProvider {
               vector_score: parseFloat(row.vector_score),
               bm25_score: parseFloat(row.bm25_score),
               time_score: parseFloat(row.time_score),
+              feedback_score: parseFloat(row.feedback_score || 0),
               outcome_bonus: outcomeBonus,
             },
           };
@@ -303,9 +304,9 @@ export class PgVectorProvider implements MemoryProvider {
         .slice(0, limit),
       };
     } else {
-      // Project-scoped hybrid search
+      // Project-scoped hybrid search with feedback
       const result = await this.pool.query(
-        `SELECT * FROM search_hybrid($1, $2::vector, $3, $4, $5, $6, $7)`,
+        `SELECT * FROM search_hybrid_with_feedback($1, $2::vector, $3, $4, $5, $6, $7)`,
         [
           project_id,
           `[${queryEmbedding.join(',')}]`,
@@ -313,7 +314,7 @@ export class PgVectorProvider implements MemoryProvider {
           limit * 2, // Fetch more candidates before applying outcome bonus
           0.6, // vector weight
           0.3, // BM25 weight
-          0.1, // time decay weight
+          0.1, // time decay weight (feedback weight is 15% in SQL function)
         ]
       );
 
@@ -336,6 +337,7 @@ export class PgVectorProvider implements MemoryProvider {
               vector_score: parseFloat(row.vector_score),
               bm25_score: parseFloat(row.bm25_score),
               time_score: parseFloat(row.time_score),
+              feedback_score: parseFloat(row.feedback_score || 0),
               outcome_bonus: outcomeBonus,
             },
           };
