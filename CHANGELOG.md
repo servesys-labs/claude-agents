@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2] - 2025-10-05
+
+### Fixed
+- **Auto-setup in empty directories**: Removed project file check (package.json, git, etc.). Now works in any directory where Claude Code is run (except $HOME/). Reasoning: If user runs Claude Code, they're coding - no need to check for project markers.
+
+### Added
+- **resume_with_context.sh**: Enhanced resume helper for mid-development projects. Includes git history, last DIGEST, project structure, and dependencies for better context restoration.
+
 ## [1.1.1] - 2025-10-05
 
 ### Changed
