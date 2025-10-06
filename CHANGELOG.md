@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.0] - 2025-10-05
+
+### Added
+- **GPT-5 PM Agent System**: Autonomous decision-making when agents encounter questions
+  - `AGENTS.md`: Project context and decision frameworks for GPT-5
+  - `pm_decision_hook.py`: Detects decision points and queues requests
+  - `pm_queue_processor.py`: Processes queue via OpenAI API (GPT-4o)
+  - `setup_pm_launchd.sh`: Launchd agent setup (runs every 10 minutes)
+  - `PM_AGENT_SETUP.md`: Complete documentation
+  - Resume instructions: `.claude/logs/pm-resume/*.md`
+  - Decision logging: `.claude/logs/pm-decisions.json`
+
+### Changed
+- **stop_digest.py**: Integrated PM hook spawning when `ENABLE_PM_AGENT=true`
+
+### Fixed
+- **stop_digest.py**: UnboundLocalError (removed duplicate sys import on line 1292)
+
+### Cost
+- ~$0.005 per PM decision (GPT-4o, ~2500 tokens average)
+
 ## [1.0.12] - 2025-10-05
 
 ### Fixed
