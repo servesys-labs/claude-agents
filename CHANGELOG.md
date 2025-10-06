@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.12] - 2025-10-05
+
+### Fixed
+- **CLAUDE.md Auto-Injection**: Changed `project_status.py` from 10-minute protection window to permanent skip. If CLAUDE.md exists, it will never be touched again, preventing overwrites after sleep/restart. Now consistent with how NOTES.md and other files are handled.
+
 ## [1.0.11] - 2025-10-05
 
 ### Fixed
