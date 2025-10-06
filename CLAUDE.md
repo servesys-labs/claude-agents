@@ -5,8 +5,8 @@
 - Main Agent (Claude Orchestrator) does not edit code directly.
 - Direct writes allowed only for: docs (.md), configs (.json/.env/.yaml), non‑code answers, reading tools.
 - All code changes route through subagents:
-  • Bugs → RC (requirements) → CN (change map) → IE (impl)
-  • Features → IPSA (plan) → CN → IE → TA (tests) → ICA (integration) → PRV (readiness)
+  • Bugs → RC (requirements) → CN (change map) → IE (impl) → IV (validation)
+  • Features → IPSA (plan) → CN → IE → IV (validation) → TA (tests) → ICA (integration) → PRV (readiness)
 - Every response starts with: “Routing Decision: [subagent]” or “[direct: reason]”.
 </system>
 
@@ -64,7 +64,7 @@
 
 <orchestration_routing>
 🤖 Orchestration & Routing
-- Default flow: IPSA → RC → CN → IE → TA → IDS → (DME if data) → ICA → PRV → CRA → RM → PDV
+- Default flow: IPSA → RC → CN → IE → IV → TA → IDS → (DME if data) → ICA → PRV → CRA → RM → PDV
 - Helpers: SUPB (UI), DCA (docs), GIC (git), SA (security), PO (perf), OLA (observability), Infra (infra/devops), SI (service integrator), AUA (accessibility), WCS (web), MMB (brainstorm), PERPLEXITY (live), RA (relevance), ADU (doc update)
 - Specialized helpers: Stripe Expert (payments)
 - Rules:
@@ -85,6 +85,7 @@
 - RC: Requirements Clarifier
 - CN: Code Navigator
 - IE: Implementation Engineer
+- IV: Implementation Validator
 - TA: Test Author & Coverage Enforcer
 - IDS: Interface & Dependency Steward
 - DME: Data & Migration Engineer
@@ -204,6 +205,13 @@ CN — Code Navigator
 IE — Implementation Engineer
 	•	Use: After CN.
 	•	Outputs: Minimal diffs, added missing symbols/files, rationale comments.
+
+⸻
+
+IV — Implementation Validator
+	•	Use: Immediately after IE, before TA.
+	•	Outputs: Plan coverage and gap report (files vs. change map), pending “Next Steps” from latest DIGEST, compact readiness note.
+	•	Policy: Fast, local checks by default; never blocks. Surfaces gaps early to reduce TA rework.
 
 ⸻
 
@@ -920,6 +928,102 @@ Auto-deploys via Railway when pushed to main.
 **All solutions documented as fixpacks in `fixpacks/` directory.**
 
 </mcp_server_config>
+
+⸻
+
+<mcp_configuration_strategy>
+## 🔧 MCP Configuration Strategy
+
+### Global-Only Configuration (User Preference)
+
+**All MCP servers are configured globally in `~/.claude.json`:**
+- ✅ **Single source of truth** for all MCP servers
+- ✅ **No per-project configuration** needed
+- ✅ **Credentials in one secure location**
+- ✅ **Consistent tools across all projects**
+
+**Project-level `.mcp.json` files are NOT used** for this user's workflow.
+
+### Current Setup (2025-10-06)
+
+**Global Config (`~/.claude.json`):**
+```json
+{
+  "mcpServers": {
+    "vector-bridge": { /* global vector memory */ },
+    "openai-bridge": { /* GPT-5 integration */ },
+    "perplexity-ask": { /* live web search */ },
+    "gemini-bridge": { /* Gemini integration */ },
+    "github-bridge": { /* GitHub API */ },
+    "browser-automation": { /* Playwright */ },
+    "monitoring-bridge": { /* Railway/infra */ }
+  }
+}
+```
+
+**Project Config Template (`~/.claude/mcp-template.json`):**
+```json
+{
+  "mcpServers": {},
+  "_comment": "NOT USED - All MCP servers are configured globally in ~/.claude.json"
+}
+```
+
+### Automation (auto_project_setup.py)
+
+The `auto_project_setup.py` hook automatically creates empty `.mcp.json` files in new projects. This ensures:
+- ✅ All MCP servers loaded from global `~/.claude.json`
+- ✅ No per-project MCP configuration
+- ✅ Single source of truth for all tools
+- ✅ No risk of credential duplication or drift
+
+**Important**: Project `.mcp.json` files are intentionally empty. All MCP servers (vector-bridge, openai-bridge, etc.) are configured globally to avoid:
+- ❌ Credential duplication across repos
+- ❌ Configuration drift between projects
+- ❌ Accidentally committing secrets to git
+- ❌ Maintenance overhead of per-project configs
+
+### Troubleshooting
+
+**MCP tools not available?**
+1. Check global config: `cat ~/.claude.json | jq .mcpServers`
+2. Restart Claude Code (MCP servers load on startup)
+3. Verify credentials in environment: `env | grep -E "DATABASE_URL_MEMORY|REDIS_URL|OPENAI_API_KEY"`
+
+**Project-specific server conflicts?**
+- Remove duplicates from `.mcp.json`: `jq 'del(.mcpServers["vector-bridge"])' .mcp.json`
+- Global servers always take precedence
+
+</mcp_configuration_strategy>
+
+⸻
+
+<operational_toggles>
+## ⚙️ Operational Toggles (Hooks)
+
+Stop Hook Performance
+- `STOP_TAIL_WINDOW_BYTES` (default 524288): Tail bytes for fast DIGEST scan.
+- `STOP_HOOK_MAX_TRANSCRIPT_BYTES` (default 524288): Skip full parse when huge (with `STOP_TAIL_FAST_ONLY=true`).
+- `STOP_TAIL_FAST_ONLY` (default false): Only tail-scan; do not full-parse if not found.
+- `STOP_TIME_BUDGET_MS` (default 0): Soft cutoff; exit early if exceeded with no DIGEST.
+- `STOP_DEBUG` (default true): Gate heavy debug logging.
+
+Project Status Updater
+- `PROJECT_STATUS_COMPACT` (default false): Hide decisions/risks; show Next Steps + Activity.
+- `PROJECT_STATUS_SHOW_DECISIONS` (default true): Toggle decisions list.
+- `PROJECT_STATUS_SHOW_ACTIVITY` (default true): Toggle Activity Snapshot.
+
+Vector Ingestion (Queue)
+- `ENABLE_VECTOR_RAG` (default false): Enable ingestion/search.
+- `INGEST_MCP_TIMEOUT_SEC` (default 60): MCP timeout for memory_ingest.
+- `INGEST_NONFATAL_ERRORS_PATTERN` (regex): Treat errors as retryable (e.g., `timed out|ECONN|ETIMEDOUT`).
+
+Implementation Validator (IV)
+- `ENABLE_IV` (default false): Run IV after Stop.
+- `IV_FAST_ONLY` (default true): Local-only checks.
+- `IV_WRITE_NOTES` (default true): Append compact IV note to NOTES.md.
+
+</operational_toggles>
 
 ⸻
 

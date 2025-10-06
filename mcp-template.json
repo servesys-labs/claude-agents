@@ -1,19 +1,4 @@
 {
-  "mcpServers": {
-    "vector-bridge": {
-      "command": "node",
-      "args": ["/Users/agentsy/.claude/mcp-servers/vector-bridge/dist/index.js"],
-      "env": {
-        "DATABASE_URL": "${DATABASE_URL_MEMORY}",
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-      }
-    },
-    "ui-template-bridge": {
-      "command": "node",
-      "args": ["/Users/agentsy/.claude/mcp-servers/ui-template-bridge/dist/index.js"],
-      "env": {
-        "UI_TEMPLATE_API_URL": "https://ui-template-api-production-production.up.railway.app"
-      }
-    }
-  }
+  "mcpServers": {},
+  "_comment": "NOT USED - All MCP servers are configured globally in ~/.claude.json. Project-level MCP configs are disabled for this user's workflow."
 }

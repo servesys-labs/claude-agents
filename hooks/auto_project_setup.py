@@ -207,6 +207,27 @@ def ensure_settings_json():
     except Exception:
         return False
 
+def ensure_project_mcp_json():
+    """
+    Create .mcp.json in project root from global template if missing.
+
+    Returns:
+        bool: True if created, False otherwise
+    """
+    template = Path.home() / ".claude" / "mcp-template.json"
+    dest = PROJECT_ROOT / ".mcp.json"
+
+    if dest.exists():
+        return False
+    if not template.exists():
+        return False
+
+    try:
+        dest.write_text(template.read_text())
+        return True
+    except Exception:
+        return False
+
 def merge_global_hooks():
     """
     Merge global hooks into project-local settings if local settings exist.
@@ -235,22 +256,41 @@ def merge_global_hooks():
         with open(local_settings) as f:
             local_config = json.load(f)
 
-        # Check if hooks already merged
-        if "hooks" in local_config and local_config.get("hooks"):
-            return False  # Already has hooks, don't overwrite
+        changed = False
 
         # Merge permissions from global (if not set locally)
         if "permissions" not in local_config:
             global_permissions = global_config.get("permissions", {})
             if global_permissions:
                 local_config["permissions"] = global_permissions
+                changed = True
 
-        # Merge hooks from global
-        global_hooks = global_config.get("hooks", {})
-        if not global_hooks:
+        # Merge hooks from global only if missing locally
+        if "hooks" not in local_config or not local_config.get("hooks"):
+            global_hooks = global_config.get("hooks", {})
+            if global_hooks:
+                local_config["hooks"] = global_hooks
+                changed = True
+
+        # Merge MCP servers if missing locally
+        if "mcpServers" not in local_config:
+            mcp_servers = global_config.get("mcpServers", {}) or {}
+            if not mcp_servers:
+                # Fallback to mcp-template.json
+                template_path = Path.home() / ".claude" / "mcp-template.json"
+                if template_path.exists():
+                    try:
+                        with open(template_path) as tf:
+                            tpl = json.load(tf)
+                            mcp_servers = tpl.get("mcpServers", {}) or {}
+                    except Exception:
+                        mcp_servers = {}
+            if mcp_servers:
+                local_config["mcpServers"] = mcp_servers
+                changed = True
+
+        if not changed:
             return False
-
-        local_config["hooks"] = global_hooks
 
         # Write merged settings
         with open(local_settings, "w") as f:
@@ -622,9 +662,13 @@ def main():
         if ensure_claude_md():
             actions.append("Created CLAUDE.md")
 
-        # 5. Copy settings.json (for MCP servers)
+        # 5a. Ensure .mcp.json (MCP servers config)
+        if ensure_project_mcp_json():
+            actions.append("Created .mcp.json (from template)")
+
+        # 5b. Copy settings.json (for hooks/permissions)
         if ensure_settings_json():
-            actions.append("Copied settings.json (MCP servers enabled)")
+            actions.append("Copied settings.json (hooks/permissions)")
 
         # 6. Setup per-project launchd agents (if Vector RAG credentials exist)
         if setup_launchd_agents():

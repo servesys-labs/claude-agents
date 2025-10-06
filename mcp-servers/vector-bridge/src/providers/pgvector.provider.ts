@@ -33,7 +33,7 @@ export class PgVectorProvider implements MemoryProvider {
     // Initialize Redis cache if URL provided
     if (redisUrl || process.env.REDIS_URL) {
       this.cache = new RedisCacheService(redisUrl);
-      console.log('[PgVectorProvider] Redis cache enabled');
+      console.error('[PgVectorProvider] Redis cache enabled');
     } else {
       console.warn('[PgVectorProvider] No Redis URL provided, running without cache');
     }
@@ -74,12 +74,12 @@ export class PgVectorProvider implements MemoryProvider {
     meta?: Record<string, any>
   ): Promise<IngestResult> {
     const startTime = Date.now();
-    console.log(`[Ingest] Starting ingestion: ${path} (${text.length} bytes)`);
+    console.error(`[Ingest] Starting ingestion: ${path} (${text.length} bytes)`);
 
     // Get or create project
     const t1 = Date.now();
     const project_id = await this.getOrCreateProject(project_root);
-    console.log(`[Ingest] Project ID: ${project_id} (${Date.now() - t1}ms)`);
+    console.error(`[Ingest] Project ID: ${project_id} (${Date.now() - t1}ms)`);
     const repo_name = project_root.split('/').pop() || project_root;
 
     // Infer metadata (allow override via meta)
@@ -87,12 +87,12 @@ export class PgVectorProvider implements MemoryProvider {
     const component = meta?.component || this.categoryInference.inferComponent(path);
     const category = meta?.category || this.categoryInference.inferCategory(path, text);
     const tags = meta?.tags || this.categoryInference.extractTags(text);
-    console.log(`[Ingest] Metadata inferred (${Date.now() - t2}ms): component=${component}, category=${category}`);
+    console.error(`[Ingest] Metadata inferred (${Date.now() - t2}ms): component=${component}, category=${category}`);
 
     // Chunk the text
     const t3 = Date.now();
     const { chunks } = this.chunking.chunk(text);
-    console.log(`[Ingest] Chunked into ${chunks.length} pieces (${Date.now() - t3}ms)`);
+    console.error(`[Ingest] Chunked into ${chunks.length} pieces (${Date.now() - t3}ms)`);
 
     if (chunks.length === 0) {
       return { chunks: 0, project_id };
@@ -110,7 +110,7 @@ export class PgVectorProvider implements MemoryProvider {
       if (this.cache) {
         const isDuplicate = await this.cache.checkDedupe(project_id.toString(), chunkSha);
         if (isDuplicate) {
-          console.log(`[Dedupe] Skipping duplicate chunk: ${chunk.substring(0, 50)}...`);
+          console.error(`[Dedupe] Skipping duplicate chunk: ${chunk.substring(0, 50)}...`);
           continue;
         }
       }
@@ -118,14 +118,14 @@ export class PgVectorProvider implements MemoryProvider {
       deduplicatedChunks.push(chunk);
       chunkShas.push(chunkSha);
     }
-    console.log(`[Ingest] Dedupe check completed (${Date.now() - t4}ms): ${deduplicatedChunks.length}/${chunks.length} unique`);
+    console.error(`[Ingest] Dedupe check completed (${Date.now() - t4}ms): ${deduplicatedChunks.length}/${chunks.length} unique`);
 
     if (deduplicatedChunks.length === 0) {
-      console.log('[Dedupe] All chunks were duplicates, skipping ingestion');
+      console.error('[Dedupe] All chunks were duplicates, skipping ingestion');
       return { chunks: 0, project_id };
     }
 
-    console.log(
+    console.error(
       `[Ingest] Processing ${deduplicatedChunks.length}/${chunks.length} chunks (${chunks.length - deduplicatedChunks.length} duplicates skipped)`
     );
 
@@ -139,14 +139,14 @@ export class PgVectorProvider implements MemoryProvider {
 
     // Generate embeddings for deduplicated chunks
     const t5 = Date.now();
-    console.log(`[Ingest] Calling OpenAI embedBatch for ${deduplicatedChunks.length} chunks...`);
+    console.error(`[Ingest] Calling OpenAI embedBatch for ${deduplicatedChunks.length} chunks...`);
     const embeddings = await embeddingService.embedBatch(deduplicatedChunks);
-    console.log(`[Ingest] ✅ Embeddings generated (${Date.now() - t5}ms, ${((Date.now() - t5) / deduplicatedChunks.length).toFixed(0)}ms/chunk)`);
+    console.error(`[Ingest] ✅ Embeddings generated (${Date.now() - t5}ms, ${((Date.now() - t5) / deduplicatedChunks.length).toFixed(0)}ms/chunk)`);
 
     // Insert chunks into database
     const t6 = Date.now();
     const client = await this.pool.connect();
-    console.log(`[Ingest] Database connection acquired (${Date.now() - t6}ms)`);
+    console.error(`[Ingest] Database connection acquired (${Date.now() - t6}ms)`);
     try {
       await client.query('BEGIN');
 
@@ -194,8 +194,8 @@ export class PgVectorProvider implements MemoryProvider {
 
       const t7 = Date.now();
       await client.query('COMMIT');
-      console.log(`[Ingest] Database COMMIT completed (${Date.now() - t7}ms)`);
-      console.log(`[Ingest] ✅ Total ingestion time: ${Date.now() - startTime}ms for ${inserted} chunks`);
+      console.error(`[Ingest] Database COMMIT completed (${Date.now() - t7}ms)`);
+      console.error(`[Ingest] ✅ Total ingestion time: ${Date.now() - startTime}ms for ${inserted} chunks`);
       return { chunks: inserted, project_id };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -241,7 +241,7 @@ export class PgVectorProvider implements MemoryProvider {
       );
 
       if (cachedResults) {
-        console.log('[Cache] Returning cached search results');
+        console.error('[Cache] Returning cached search results');
         return { results: cachedResults, project_id };
       }
     }

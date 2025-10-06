@@ -298,13 +298,36 @@ def call_vector_bridge_mcp(tool_name, params):
             env={**os.environ, "DATABASE_URL_MEMORY": os.environ.get("DATABASE_URL_MEMORY", ""), "REDIS_URL": os.environ.get("REDIS_URL", ""), "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", "")}
         )
 
-        # Send requests with timeout (60s for embedding generation + DB writes)
+        # Send requests with configurable timeout (default 60s)
         requests = f"{json.dumps(init_request)}\n{json.dumps(tool_request)}\n"
         try:
-            stdout, stderr = proc.communicate(input=requests, timeout=60)
-        except subprocess.TimeoutExpired:
+            timeout_sec = int(os.environ.get("INGEST_MCP_TIMEOUT_SEC", "60"))
+            if os.environ.get("INGEST_DEBUG", "").lower() == "true":
+                print(f"[DEBUG] Calling MCP memory_ingest with {timeout_sec}s timeout...", file=sys.stderr)
+            stdout, stderr = proc.communicate(input=requests, timeout=timeout_sec)
+            if os.environ.get("INGEST_DEBUG", "").lower() == "true":
+                print(f"[DEBUG] MCP call completed", file=sys.stderr)
+                if stderr:
+                    print(f"[DEBUG] MCP stderr output:", file=sys.stderr)
+                    print(stderr, file=sys.stderr)
+        except subprocess.TimeoutExpired as e:
             proc.kill()
-            return {"error": "MCP call timed out after 60s"}
+            stdout_output = e.stdout or ""
+            stderr_output = e.stderr or ""
+            if os.environ.get("INGEST_DEBUG", "").lower() == "true":
+                print(f"[DEBUG] MCP timeout - captured stderr before kill:", file=sys.stderr)
+                if stderr_output:
+                    print(stderr_output, file=sys.stderr)
+
+            # Check if ingestion actually completed successfully (check stderr for success markers)
+            stderr_str = stderr_output.decode() if isinstance(stderr_output, bytes) else stderr_output
+            if "Total ingestion time:" in stderr_str or "All chunks were duplicates" in stderr_str:
+                # Ingestion completed, just didn't get MCP response - treat as success
+                if os.environ.get("INGEST_DEBUG", "").lower() == "true":
+                    print(f"[DEBUG] Ingestion completed successfully despite timeout (MCP protocol issue)", file=sys.stderr)
+                return {"success": True, "chunks": 0, "note": "completed_but_mcp_timeout"}
+
+            return {"error": f"MCP call timed out after {os.environ.get('INGEST_MCP_TIMEOUT_SEC', '60')}s"}
 
         # Parse responses (MCP returns multiple JSON objects)
         responses = []
@@ -525,6 +548,14 @@ def process_ingest_queue(max_jobs=3, time_budget_sec=5, debug_log_path=None):
         # Success only if there is no error and not explicitly skipped
         ok = bool(result) and (not result.get("error")) and (not result.get("skipped"))
         is_missing_creds = result and result.get("skipped") and "not configured" in str(result.get("skipped", ""))
+        # Classify retryable (transient) errors by regex (timeouts, transient network)
+        err_text = (result or {}).get("error", "") if isinstance(result, dict) else ""
+        try:
+            import re as _re
+            nonfatal_pat = os.environ.get("INGEST_NONFATAL_ERRORS_PATTERN", r"timed out|ECONN|ENETUNREACH|ETIMEDOUT|EAI_AGAIN|connection reset|timeout")
+            is_retryable = bool(err_text and _re.search(nonfatal_pat, str(err_text), _re.IGNORECASE))
+        except Exception:
+            is_retryable = False
 
         if ok:
             succeeded += 1
@@ -559,6 +590,23 @@ def process_ingest_queue(max_jobs=3, time_budget_sec=5, debug_log_path=None):
             append_warning(
                 "Vector RAG credentials are missing. Set `DATABASE_URL_MEMORY`, `REDIS_URL`, and `OPENAI_API_KEY`, then run `python hooks/stop_digest.py --process-queue` to ingest queued DIGESTs."
             )
+        elif is_retryable:
+            # Transient error - keep queued, undo attempt increment, and back off
+            job["last_error"] = err_text or "retryable error"
+            job["status"] = "queued"
+            job["attempt_count"] -= 1
+            try:
+                with open(job_path, "w", encoding="utf-8") as f:
+                    json.dump(job, f, indent=2)
+                    f.write("\n")
+            except Exception:
+                pass
+            if debug_log_path:
+                try:
+                    with open(debug_log_path, "a") as logf:
+                        logf.write(f"⏳ Retryable ingest error for {name}: {job['last_error']}\n")
+                except Exception:
+                    pass
         else:
             failed += 1
             job["last_error"] = (result or {}).get("error", "unknown error")
@@ -1139,7 +1187,6 @@ def main():
         return
     if len(sys.argv) > 1 and sys.argv[1] in {"--uninstall-launchd", "-U"}:
         # Unload and remove the LaunchAgent from LaunchAgents and local plist copy
-        import subprocess
         label, _, plist_filename = build_launchd_plist()
         dest = os.path.join(os.path.expanduser("~/Library/LaunchAgents"), plist_filename)
         # Try unload
@@ -1502,6 +1549,22 @@ def main():
             except Exception as e:
                 if STOP_DEBUG:
                     _log(debug_log, f"   ⚠️  PM hook failed: {e}")
+
+        # Fire-and-forget: Implementation Validator (IV) to check completeness before TA
+        try:
+            enable_iv = os.environ.get("ENABLE_IV", "false").lower() == "true"
+            if enable_iv:
+                iv_path = os.path.join(os.path.dirname(__file__), "implementation_validator.py")
+                subprocess.Popen(
+                    [sys.executable, iv_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                if STOP_DEBUG:
+                    _log(debug_log, "🧪 Spawned Implementation Validator (IV)")
+        except Exception as e:
+            if STOP_DEBUG:
+                _log(debug_log, f"⚠️  Failed to spawn IV: {e}")
 
         # Show user-visible warning if credentials are missing (check via env var instead)
         enable_rag = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"

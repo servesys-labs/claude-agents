@@ -160,6 +160,12 @@ if [ -f "$SCRIPT_DIR/settings.json" ]; then
     echo -e "${GREEN}✓ Hook configuration (settings.json)${NC}"
 fi
 
+# Copy MCP template for per-project .mcp.json bootstrapping
+if [ -f "$SCRIPT_DIR/mcp-template.json" ]; then
+    cp "$SCRIPT_DIR/mcp-template.json" "$INSTALL_DIR/mcp-template.json"
+    echo -e "${GREEN}✓ MCP template (mcp-template.json)${NC}"
+fi
+
 # Copy other essential files
 [ -f "$SCRIPT_DIR/package.json" ] && cp "$SCRIPT_DIR/package.json" "$INSTALL_DIR/" 2>/dev/null || true
 [ -f "$SCRIPT_DIR/VERSION" ] && cp "$SCRIPT_DIR/VERSION" "$INSTALL_DIR/" 2>/dev/null || true

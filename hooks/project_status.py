@@ -17,6 +17,11 @@ WSI_PATH = os.environ.get("WSI_PATH", os.path.join(LOGS_DIR, "wsi.json"))
 WARNINGS_PATH = os.path.join(LOGS_DIR, "WARNINGS.md")
 CLAUDE_MD_PATH = os.path.join(PROJECT_ROOT, "CLAUDE.md")
 
+# Rendering toggles (env-configurable)
+PROJECT_STATUS_COMPACT = os.environ.get("PROJECT_STATUS_COMPACT", "false").lower() == "true"
+PROJECT_STATUS_SHOW_DECISIONS = os.environ.get("PROJECT_STATUS_SHOW_DECISIONS", "true").lower() == "true"
+PROJECT_STATUS_SHOW_ACTIVITY = os.environ.get("PROJECT_STATUS_SHOW_ACTIVITY", "true").lower() == "true"
+
 def _ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -136,6 +141,55 @@ def _extract_recent_from_notes(notes_text: str, count: int = 3) -> Dict[str, Lis
                     if pth:
                         components.append(os.path.basename(pth))
     return {"decisions": decisions[:3], "components": list(dict.fromkeys(components))[:5]}
+
+def _extract_last_digest_info(notes_text: str) -> Optional[Dict[str, Any]]:
+    """Parse the most recent digest header from NOTES.md and extract quick facts.
+    Expected header format (written by stop_digest.append_notes):
+      ## [<ts>] Subagent Digest — <agent> — task:<task_id>
+    Also counts bullets in Decisions and Files sections for quick signal.
+    """
+    if not notes_text:
+        return None
+    try:
+        # Find last header
+        m = re.findall(r"## \[(?P<ts>[^\]]+)\]\s+Subagent Digest\s+—\s+(?P<agent>[^—]+?)\s+—\s+task:(?P<task>[^\n]+)", notes_text)
+        if not m:
+            return None
+        ts, agent, task = m[-1]
+        # Slice from this header to next header/end for counting
+        header_pat = re.escape(f"## [{ts}] Subagent Digest — {agent} — task:{task}")
+        block_m = re.search(header_pat + r"(.*?)(?=\n## |\Z)", notes_text, re.DOTALL)
+        block = block_m.group(1) if block_m else ""
+        # Count decisions bullets
+        dec_count = 0
+        dm = re.search(r"\*\*Decisions\*\*[\r\n]+(.*?)(?:\n\*\*|\Z)", block, re.DOTALL)
+        if dm:
+            dec_count = sum(1 for line in dm.group(1).splitlines() if line.strip().startswith("- "))
+        # Count files bullets
+        file_count = 0
+        fm = re.search(r"\*\*Files\*\*[\r\n]+(.*?)(?:\n\*\*|\Z)", block, re.DOTALL)
+        if fm:
+            file_count = sum(1 for line in fm.group(1).splitlines() if line.strip().startswith("- "))
+        # Extract Next Steps bullets (up to 3)
+        next_steps: List[str] = []
+        nm = re.search(r"\*\*Next\s*Steps\*\*[\r\n]+(.*?)(?:\n\*\*|\Z)", block, re.DOTALL | re.IGNORECASE)
+        if nm:
+            for line in nm.group(1).splitlines():
+                s = line.strip()
+                if s.startswith("- "):
+                    next_steps.append(_compact_line(s[2:]))
+                    if len(next_steps) >= 3:
+                        break
+        return {
+            "timestamp": ts,
+            "agent": agent.strip(),
+            "task_id": task.strip(),
+            "decisions": dec_count,
+            "files": file_count,
+            "next": next_steps,
+        }
+    except Exception:
+        return None
 
 def _parse_iso(ts: Optional[str]) -> Optional[datetime]:
     if not ts:
@@ -322,6 +376,7 @@ def _collect_status(use_vector: bool = True) -> Dict[str, Any]:
     # Fallback from NOTES.md
     notes_text = _read_text(os.path.join(CLAUDE_DIR, "logs", "NOTES.md"))
     fb = _extract_recent_from_notes(notes_text)
+    last_digest = _extract_last_digest_info(notes_text)
 
     # Components from WSI
     wsi = _read_json(WSI_PATH, {"items": []})
@@ -427,10 +482,23 @@ def _collect_status(use_vector: bool = True) -> Dict[str, Any]:
                 next_b.append(s)
         if len(next_b) >= 3:
             break
+    # Fallback to last digest's Next Steps if vector-derived steps are empty
+    if not next_b and last_digest and last_digest.get("next"):
+        next_b = list(last_digest.get("next", []))[:3]
 
     # Summary line with phase inference
     vector_enabled = do_vector
     data_state = "fresh" if (vector_enabled and not has_creds_warning and queued==0) else "stale"
+    data_reasons: List[str] = []
+    if data_state != "fresh":
+        if queued > 0:
+            data_reasons.append("queue>0")
+        if not vector_env_enabled:
+            data_reasons.append("vector disabled")
+        elif has_creds_warning:
+            data_reasons.append("missing creds")
+        elif not do_vector:
+            data_reasons.append("local mode")
     phase = _infer_phase(decisions_b, risks_b, next_b, data_state, queued, vector_enabled)
     if hot_focus:
         summary = f"Phase: {phase} — Focus: {hot_focus} — Status snapshot from vector digests + local logs"
@@ -441,7 +509,7 @@ def _collect_status(use_vector: bool = True) -> Dict[str, Any]:
     status = {
         "project": os.path.basename(PROJECT_ROOT) or "project",
         "updated_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),
-        "data": {"state": data_state, "queue": queued},
+        "data": {"state": data_state, "queue": queued, "reasons": data_reasons},
         "mode": ("vector" if vector_enabled else "local"),
         "summary": summary,
         "milestones": {
@@ -455,7 +523,9 @@ def _collect_status(use_vector: bool = True) -> Dict[str, Any]:
         "activity": {
             "components": (fb.get("components", []) or recent_components)[:5],
             "agents": []
-        }
+        },
+        "last_digest": last_digest,
+        "next_steps": next_b,
     }
 
     # Try to infer ETA from next_results
@@ -479,11 +549,22 @@ def _render_status_block(status: Dict[str, Any]) -> str:
     data = status.get("data", {})
     d_state = data.get("state", "stale")
     d_queue = data.get("queue", 0)
+    d_reasons = data.get("reasons", []) or []
     lines = []
     lines.append(PROJECT_STATUS_TAG_START)
-    lines.append(f"Project: {project} | Last Update: {upd} | Data: {d_state} (queue={d_queue})")
+    header_tail = f"queue={d_queue}" + (f"; {'; '.join(d_reasons)}" if d_reasons else "")
+    lines.append(f"Project: {project} | Last Update: {upd} | Data: {d_state} ({header_tail})")
     lines.append("Summary:")
     lines.append(f"- {_compact_line(status.get('summary', '') or 'n/a')}")
+
+    # Last digest quick facts
+    last = status.get("last_digest") or {}
+    if last:
+        ld_agent = last.get("agent", "?")
+        ld_task = last.get("task_id", "?")
+        ld_dec = last.get("decisions", 0)
+        ld_files = last.get("files", 0)
+        lines.append(f"Last Digest: agent={ld_agent}, task={ld_task}, decisions={ld_dec}, files={ld_files}")
 
     ms = status.get("milestones", {})
     lines.append("Milestones:")
@@ -494,17 +575,33 @@ def _render_status_block(status: Dict[str, Any]) -> str:
     if ms.get("eta"):
         lines.append(f"- ETA: {_compact_line('; '.join(ms['eta']))}")
 
-    decs = status.get("decisions", [])
-    if decs:
-        lines.append("Decisions (recent):")
-        for d in decs[:3]:
-            lines.append(f"- {_compact_line(d)}")
+    # Next Steps (show explicitly; compact mode prioritizes this over decisions)
+    next_steps = status.get("next_steps", []) or []
+    if next_steps:
+        lines.append("Next Steps:")
+        for s in next_steps[:3]:
+            lines.append(f"- {_compact_line(s)}")
 
-    risks = status.get("risks", [])
-    if risks:
-        lines.append("Risks/Blockers:")
-        for r in risks[:3]:
-            lines.append(f"- {_compact_line(r)}")
+    # Optionally include decisions/risks based on toggles
+    if not PROJECT_STATUS_COMPACT and PROJECT_STATUS_SHOW_DECISIONS:
+        decs = status.get("decisions", [])
+        # Avoid duplicating the Done item in decisions list
+        done_item = None
+        if isinstance(ms, dict) and ms.get("done"):
+            done_item = _compact_line(ms["done"][0])
+        if done_item:
+            decs = [d for d in decs if _compact_line(d) != done_item]
+        if decs:
+            lines.append("Decisions (recent):")
+            for d in decs[:3]:
+                lines.append(f"- {_compact_line(d)}")
+
+    if not PROJECT_STATUS_COMPACT:
+        risks = status.get("risks", [])
+        if risks:
+            lines.append("Risks/Blockers:")
+            for r in risks[:3]:
+                lines.append(f"- {_compact_line(r)}")
 
     oq = status.get("open_questions", [])
     if oq:
@@ -512,11 +609,12 @@ def _render_status_block(status: Dict[str, Any]) -> str:
         for q in oq[:3]:
             lines.append(f"- {_compact_line(q)}")
 
-    act = status.get("activity", {})
-    comps = act.get("components", [])
-    if comps:
-        lines.append("Activity Snapshot:")
-        lines.append(f"- Components: {', '.join(comps[:5])}")
+    if PROJECT_STATUS_SHOW_ACTIVITY:
+        act = status.get("activity", {})
+        comps = act.get("components", [])
+        if comps:
+            lines.append("Activity Snapshot:")
+            lines.append(f"- Components: {', '.join(comps[:5])}")
 
     lines.append(PROJECT_STATUS_TAG_END)
     return "\n".join(lines) + "\n"

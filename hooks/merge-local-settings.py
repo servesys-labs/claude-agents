@@ -55,6 +55,28 @@ def merge_settings(project_dir):
         else:
             print(f"⚠ {hook_type} already exists in local, keeping local version")
 
+    # Merge MCP servers configuration
+    # Priority: keep local mcpServers if already present
+    if "mcpServers" not in local_config:
+        mcp_servers = {}
+        # Source 1: global settings.json (if it has mcpServers)
+        mcp_servers = global_config.get("mcpServers", {}) or {}
+        # Source 2: ~/.claude/mcp-template.json (fallback/template)
+        if not mcp_servers:
+            try:
+                template_path = Path.home() / ".claude" / "mcp-template.json"
+                if template_path.exists():
+                    with open(template_path) as tf:
+                        template_cfg = json.load(tf)
+                        mcp_servers = template_cfg.get("mcpServers", {}) or {}
+            except Exception:
+                mcp_servers = {}
+        if mcp_servers:
+            local_config["mcpServers"] = mcp_servers
+            print(f"✓ Added mcpServers from {'global settings' if global_config.get('mcpServers') else 'mcp-template.json'}")
+        else:
+            print("ℹ No mcpServers found in global or template; skipping MCP merge")
+
     # Ensure directory exists
     local_settings.parent.mkdir(parents=True, exist_ok=True)
 

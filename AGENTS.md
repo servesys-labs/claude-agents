@@ -13,6 +13,7 @@ This file provides context to the GPT-5 PM agent for making strategic decisions 
 - Redis (caching)
 - TypeScript (MCP servers)
 - Launchd agents (background processing)
+ - Implementation Validator (IV) — post-IE fast validation
 
 **Key Repositories:**
 - `~/.claude/` - Main orchestration framework (this project)
@@ -115,6 +116,64 @@ This file provides context to the GPT-5 PM agent for making strategic decisions 
 **Action:** Make change, document reasoning
 
 ---
+
+## New Agent: IV — Implementation Validator
+
+**Purpose:** Reduce thrash between IE and TA by validating completeness against the latest DIGEST and recent file activity before tests begin.
+
+**When to run:**
+- Immediately after IE declares completion (Stop hook), or on explicit request.
+
+**Inputs:**
+- `.claude/logs/NOTES.md` (last Subagent DIGEST)
+- `.claude/logs/wsi.json` (recently touched files)
+
+**Checks (fast, local-only by default):**
+- Files listed in DIGEST exist in recent WSI activity (signals missed changes)
+- Pending “Next Steps” from DIGEST are enumerated for IE to address
+
+**Outputs:**
+- WARNINGS.md note if gaps exist
+- Compact IV note in NOTES.md with summary and actionable gaps
+- Optional: emit focused “test plan” outline for TA (future)
+
+**Enable/Disable:**
+- `ENABLE_IV=true` to spawn after Stop (non-blocking)
+- `IV_FAST_ONLY=true` (default): local-only checks
+- `IV_WRITE_NOTES=true` (default): append compact IV note to NOTES.md
+
+---
+
+## Operational Toggles (Hooks)
+
+Stop Hook Performance
+- `STOP_TAIL_WINDOW_BYTES` (default 524288): Tail bytes for fast DIGEST scan
+- `STOP_HOOK_MAX_TRANSCRIPT_BYTES` (default 524288): Skip full parse when huge (with `STOP_TAIL_FAST_ONLY=true`)
+- `STOP_TAIL_FAST_ONLY` (default false): Only tail-scan; do not full-parse if not found
+- `STOP_TIME_BUDGET_MS` (default 0): Soft cutoff; exit early if exceeded with no DIGEST
+- `STOP_DEBUG` (default true): Gate debug logging
+
+Project Status Updater
+- `PROJECT_STATUS_COMPACT` (default false): Compact header + Next Steps; hide decisions/risks
+- `PROJECT_STATUS_SHOW_DECISIONS` (default true)
+- `PROJECT_STATUS_SHOW_ACTIVITY` (default true)
+
+Vector Ingestion (Queue)
+- `ENABLE_VECTOR_RAG` (default false)
+- `INGEST_MCP_TIMEOUT_SEC` (default 60): memory_ingest timeout
+- `INGEST_NONFATAL_ERRORS_PATTERN` (regex): Treat transient errors as retryable (e.g., `timed out|ECONN|ETIMEDOUT`)
+
+---
+
+## MCP Configuration Notes
+
+Project setup
+- `hooks/auto_project_setup.py` now creates `.mcp.json` from `~/.claude/mcp-template.json` if missing
+- `hooks/merge-local-settings.py` merges `mcpServers` into `.claude/settings.local.json` if absent (keeps local hooks/permissions)
+
+Global settings
+- `~/.claude/settings.json` includes `mcpServers` (vector-bridge, openai-bridge, perplexity-ask, ui-template-bridge)
+- For per-project `.mcp.json`, use absolute `node` path to avoid PATH issues in Claude
 
 ## Active Projects & Goals
 
