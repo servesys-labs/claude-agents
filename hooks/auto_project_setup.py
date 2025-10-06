@@ -180,6 +180,43 @@ def get_project_hash():
     project_str = str(PROJECT_ROOT)
     return hashlib.sha256(project_str.encode()).hexdigest()[:8]
 
+def get_project_name():
+    """
+    Get human-readable project name.
+    Uses git repo name, or falls back to directory name.
+    Sanitized for use in filenames (no spaces, special chars).
+    """
+    try:
+        # Try to get git remote URL and extract repo name
+        result = subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "config", "--get", "remote.origin.url"],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            git_url = result.stdout.strip()
+            # Extract repo name from URL
+            # Examples:
+            #   https://github.com/user/my-repo.git -> my-repo
+            #   git@github.com:user/my-repo.git -> my-repo
+            import re
+            match = re.search(r'/([^/]+?)(?:\.git)?$', git_url)
+            if match:
+                repo_name = match.group(1)
+                # Sanitize: lowercase, replace special chars with dash
+                sanitized = re.sub(r'[^a-z0-9]+', '-', repo_name.lower())
+                return sanitized.strip('-')
+    except Exception:
+        pass
+
+    # Fallback to directory name
+    dir_name = PROJECT_ROOT.name
+    # Sanitize
+    import re
+    sanitized = re.sub(r'[^a-z0-9]+', '-', dir_name.lower())
+    return sanitized.strip('-')
+
 def setup_launchd_agents():
     """
     Create per-project launchd agents for:
@@ -205,13 +242,15 @@ def setup_launchd_agents():
     launchd_dir.mkdir(parents=True, exist_ok=True)
 
     project_hash = get_project_hash()
+    project_name = get_project_name()
     hooks_dir = Path.home() / ".claude" / "hooks"
     node_path = get_node_path()
     node_dir = str(Path(node_path).parent)
     full_path = f"/usr/local/bin:/usr/bin:/bin:{node_dir}"
 
     # Agent 1: Queue Processor (every 15 min)
-    queue_label = f"com.claude.agents.queue.{project_hash}"
+    # Format: com.claude.agents.queue.{repo-name}.{hash}
+    queue_label = f"com.claude.agents.queue.{project_name}.{project_hash}"
     queue_plist = launchd_dir / f"{queue_label}.plist"
 
     queue_content = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -252,7 +291,8 @@ def setup_launchd_agents():
 """
 
     # Agent 2: Project Status Updater (every 5 min)
-    status_label = f"com.claude.agents.projectstatus.{project_hash}"
+    # Format: com.claude.agents.projectstatus.{repo-name}.{hash}
+    status_label = f"com.claude.agents.projectstatus.{project_name}.{project_hash}"
     status_plist = launchd_dir / f"{status_label}.plist"
 
     status_content = f"""<?xml version="1.0" encoding="UTF-8"?>
