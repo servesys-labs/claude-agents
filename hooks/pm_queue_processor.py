@@ -143,8 +143,14 @@ Be decisive, production-ready, and follow the core principles (NO-REGRESSION, AD
 
     try:
         client = openai.OpenAI(api_key=api_key)
+
+        # Model selection based on decision complexity
+        # Default: gpt-4o-mini ($0.15/$0.30 per 1M tokens, ~$0.0011/decision)
+        # Override with env var for complex decisions: PM_MODEL=o3 or PM_MODEL=gpt-4o
+        model = os.environ.get("PM_MODEL", "gpt-4o-mini")
+
         response = client.chat.completions.create(
-            model="gpt-4o",  # Use gpt-4o for cost efficiency
+            model=model,  # gpt-4o-mini for 96% cost savings vs gpt-4o
             messages=[
                 {"role": "system", "content": "You are a strategic product manager for an AI development framework. Respond only with valid JSON."},
                 {"role": "user", "content": prompt}

@@ -212,4 +212,23 @@ When you update CLAUDE.md with new policies or patterns, also update this AGENTS
 - Active project status changes
 - New core principles or quality gates
 
-This ensures GPT-5 PM agent always has current context for decision-making.
+This ensures the PM agent always has current context for decision-making.
+
+---
+
+## Model Selection
+
+The PM agent uses **GPT-4o-mini** by default (October 2025 pricing):
+- Cost: ~$0.0011 per decision (96% cheaper than GPT-4o)
+- Pricing: $0.15 input / $0.30 output per 1M tokens
+- Capability: Excellent for tactical PM decisions
+
+**Override for complex decisions:**
+Set `PM_MODEL` environment variable:
+- `PM_MODEL=o3` - High reasoning for architecture decisions ($0.025/decision)
+- `PM_MODEL=gpt-4o` - Multimodal capabilities ($0.031/decision)
+
+**When to use which model:**
+- **gpt-4o-mini** (default): 95% of PM decisions (migrations, context budget, priorities)
+- **o3**: Major architecture changes, complex trade-offs, multi-service refactors
+- **gpt-4o**: Decisions requiring image/multimodal analysis (rare for PM)

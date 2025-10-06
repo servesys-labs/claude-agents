@@ -323,11 +323,26 @@ ls -t .claude/logs/pm-resume/ | head -1 | xargs -I {} cat .claude/logs/pm-resume
 - `OPENAI_API_KEY=sk-proj-...` - Required for PM queue processor
 - `CLAUDE_PROJECT_DIR=/path/to/project` - Project root (auto-detected)
 
-### Cost Tracking
-- ~$0.005 per decision (GPT-4o, ~2500 tokens avg)
-- ~10 decisions = $0.05
-- Monitor: Check `_meta.tokens` in pm-decisions.json
+### Cost Tracking (October 2025 Pricing)
+
+**Default (gpt-4o-mini):**
+- ~$0.0011 per decision (~2500 tokens avg)
+- 100 decisions = $0.11
+- $0.15 input / $0.30 output per 1M tokens
+
+**Override for complex decisions:**
+```bash
+export PM_MODEL=o3        # $0.025/decision (high reasoning)
+export PM_MODEL=gpt-4o    # $0.031/decision (multimodal)
+```
+
+**Model Comparison:**
+- `gpt-4o-mini`: $0.0011/decision (recommended, 96% cheaper)
+- `o3`: $0.025/decision (complex architecture decisions)
+- `gpt-4o`: $0.031/decision (multimodal, overkill for PM)
+
+Monitor: Check `_meta.tokens` and `_meta.model` in pm-decisions.json
 
 ---
 
-**Status:** ✅ Fully Automated (Path B Complete) - GPT-4o PM agent operational via launchd queue processor.
+**Status:** ✅ Fully Automated (Path B Complete) - GPT-4o-mini PM agent operational via launchd queue processor.
