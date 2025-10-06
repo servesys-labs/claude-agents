@@ -168,6 +168,17 @@
         ]
       }
     ],
+    "PostCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env ENABLE_VECTOR_RAG=\"true\" LOGS_DIR=\"$CLAUDE_PROJECT_DIR/.claude/logs\" python3 $HOME/.claude/hooks/conversation_summary_ingest.py"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "",

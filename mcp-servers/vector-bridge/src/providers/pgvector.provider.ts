@@ -207,6 +207,13 @@ export class PgVectorProvider implements MemoryProvider {
 
   /**
    * Search for similar chunks with filters
+   *
+   * Uses hybrid search combining:
+   * - Vector similarity (semantic search) - 60%
+   * - BM25 text search (keyword matching) - 30%
+   * - Time decay (recency boost) - 10%
+   *
+   * Plus outcome bonus: +10% for success outcomes
    */
   async search(
     project_root: string | null,
@@ -223,13 +230,14 @@ export class PgVectorProvider implements MemoryProvider {
     // Get project ID for cache key (null for global search)
     const project_id = project_root ? await this.getOrCreateProject(project_root) : null;
 
-    // Build cache parameters
+    // Build cache parameters (include hybrid flag for cache key)
     const cacheParams = {
       k: limit,
       global,
       component: component || null,
       category: category || null,
       tags: tags || null,
+      hybrid: true, // differentiate from old vector-only cache
     };
 
     // Check cache for query results (5-minute TTL)
@@ -241,7 +249,7 @@ export class PgVectorProvider implements MemoryProvider {
       );
 
       if (cachedResults) {
-        console.error('[Cache] Returning cached search results');
+        console.error('[Cache] Returning cached hybrid search results');
         return { results: cachedResults, project_id };
       }
     }
@@ -252,57 +260,87 @@ export class PgVectorProvider implements MemoryProvider {
     let searchResult: SearchResult;
 
     if (global) {
-      // Global search across all projects with filters
+      // Global hybrid search across all projects
       const result = await this.pool.query(
-        `SELECT * FROM search_documents_global($1::vector, $2, $3, $4, $5)`,
+        `SELECT * FROM search_hybrid_global($1::vector, $2, $3, $4, $5, $6)`,
         [
           `[${queryEmbedding.join(',')}]`,
+          query, // query text for BM25
           limit,
-          component || null,
-          category || null,
-          tags || null,
+          0.6, // vector weight
+          0.3, // BM25 weight
+          0.1, // time decay weight
         ]
       );
 
       searchResult = {
-        results: result.rows.map((row) => ({
-          path: `${row.root_path}/${row.path}`,
-          chunk: row.chunk,
-          score: parseFloat(row.score),
-          component: row.component,
-          category: row.category,
-          tags: row.tags,
-          meta: {
-            ...row.meta,
-            project_root: row.root_path,
-            repo_name: row.repo_name,
-          },
-        })),
+        results: result.rows.map((row) => {
+          // Apply outcome bonus: +10% for success, -5% for failure
+          const outcomeBonus = this.calculateOutcomeBonus(row.meta);
+          const finalScore = parseFloat(row.combined_score) + outcomeBonus;
+
+          return {
+            path: `${row.root_path}/${row.path}`,
+            chunk: row.chunk,
+            score: finalScore,
+            component: row.component,
+            category: row.category,
+            tags: row.tags,
+            meta: {
+              ...row.meta,
+              project_root: row.root_path,
+              repo_name: row.repo_name,
+              vector_score: parseFloat(row.vector_score),
+              bm25_score: parseFloat(row.bm25_score),
+              time_score: parseFloat(row.time_score),
+              outcome_bonus: outcomeBonus,
+            },
+          };
+        })
+        // Re-sort after applying outcome bonus
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit),
       };
     } else {
-      // Project-scoped search with filters
+      // Project-scoped hybrid search
       const result = await this.pool.query(
-        `SELECT * FROM search_documents($1, $2::vector, $3, $4, $5, $6)`,
+        `SELECT * FROM search_hybrid($1, $2::vector, $3, $4, $5, $6, $7)`,
         [
           project_id,
           `[${queryEmbedding.join(',')}]`,
-          limit,
-          component || null,
-          category || null,
-          tags || null,
+          query, // query text for BM25
+          limit * 2, // Fetch more candidates before applying outcome bonus
+          0.6, // vector weight
+          0.3, // BM25 weight
+          0.1, // time decay weight
         ]
       );
 
       searchResult = {
-        results: result.rows.map((row) => ({
-          path: row.path,
-          chunk: row.chunk,
-          score: parseFloat(row.score),
-          component: row.component,
-          category: row.category,
-          tags: row.tags,
-          meta: row.meta,
-        })),
+        results: result.rows.map((row) => {
+          // Apply outcome bonus
+          const outcomeBonus = this.calculateOutcomeBonus(row.meta);
+          const finalScore = parseFloat(row.combined_score) + outcomeBonus;
+
+          return {
+            path: row.path,
+            chunk: row.chunk,
+            score: finalScore,
+            component: row.component,
+            category: row.category,
+            tags: row.tags,
+            meta: {
+              ...row.meta,
+              vector_score: parseFloat(row.vector_score),
+              bm25_score: parseFloat(row.bm25_score),
+              time_score: parseFloat(row.time_score),
+              outcome_bonus: outcomeBonus,
+            },
+          };
+        })
+        // Re-sort after applying outcome bonus
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit),
         project_id: project_id || undefined,
       };
     }
@@ -319,6 +357,22 @@ export class PgVectorProvider implements MemoryProvider {
     }
 
     return searchResult;
+  }
+
+  /**
+   * Calculate outcome bonus based on metadata
+   * +10% for success outcomes, -5% for failures, 0% otherwise
+   */
+  private calculateOutcomeBonus(meta: Record<string, any>): number {
+    const outcome = meta?.outcome_status || meta?.outcome;
+
+    if (outcome === 'success') {
+      return 0.10;
+    } else if (outcome === 'failure') {
+      return -0.05;
+    }
+
+    return 0.0;
   }
 
   /**
