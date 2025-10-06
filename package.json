@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/servesys-labs/claude-agents.git"
+    "url": "git+https://github.com/servesys-labs/claude-agents.git"
   },
   "bugs": {
     "url": "https://github.com/servesys-labs/claude-agents/issues"
