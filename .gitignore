@@ -70,14 +70,12 @@ todos/
 *.bak
 # IDE lock files
 ide/
-
 # Claude orchestration framework - Runtime directories (user-specific, not source code)
 .claude/
 **/.claude/
 statsig/
 ingest-queue/
 .envrc
-
 # Development files not needed in source control
 COMPACTION.md
 NOTES.md
@@ -94,12 +92,13 @@ QUEUE_CLI_REFERENCE.md
 compaction-summary.json
 test-*.md
 test-*.sh
-
 # Claude Code infrastructure (auto-generated)
 plugins/
 output-styles/
-
 # Local development Docker files
 Dockerfile.local-dev
 docker-compose.local-dev.yml
 custom-entrypoint.local-dev.sh
+
+# Claude orchestration framework
+.claude/logs/

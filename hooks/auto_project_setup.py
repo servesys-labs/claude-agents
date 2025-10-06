@@ -8,7 +8,8 @@ Runs once per project, then creates a marker file to skip future runs.
 Creates:
 - .claude/logs/ directory
 - .gitignore entries for .claude/logs/ and .envrc
-- NOTES.md (if doesn't exist)
+- .claude/logs/NOTES.md (if doesn't exist)
+- CLAUDE.md with project-specific template (if doesn't exist)
 - Per-project launchd agents (queue processor, project status updater)
 
 Exit codes:
@@ -33,7 +34,7 @@ CLAUDE_DIR = PROJECT_ROOT / ".claude"
 LOGS_DIR = CLAUDE_DIR / "logs"
 SETUP_MARKER = CLAUDE_DIR / ".setup_complete"
 GITIGNORE = PROJECT_ROOT / ".gitignore"
-NOTES_MD = PROJECT_ROOT / "NOTES.md"
+NOTES_MD = LOGS_DIR / "NOTES.md"
 
 def is_safe_project_root():
     """
@@ -133,20 +134,104 @@ def update_gitignore():
         raise e
 
 def ensure_notes_md():
-    """Create NOTES.md if it doesn't exist."""
+    """Create .claude/logs/NOTES.md if it doesn't exist."""
     if NOTES_MD.exists():
         return False
 
-    NOTES_MD.write_text("""# Project Notes
+    NOTES_MD.write_text("""# NOTES (living state)
 
-This file contains DIGEST blocks from Claude Code orchestration agents.
-
-DIGESTs are automatically appended by the Stop hook when agents complete their work.
-
----
+Last 20 digests. Older entries archived to logs/notes-archive/.
 
 """)
     return True
+
+def ensure_claude_md():
+    """Create CLAUDE.md if it doesn't exist."""
+    claude_md = PROJECT_ROOT / "CLAUDE.md"
+    if claude_md.exists():
+        return False
+
+    project_name = PROJECT_ROOT.name
+    claude_md.write_text(f"""# {project_name}
+
+Project-specific instructions for Claude Code.
+
+## Project Overview
+
+[Brief description of what this project does]
+
+## Development
+
+[Setup instructions, build commands, test commands]
+
+## Architecture
+
+[Key architectural decisions, patterns used]
+
+## Important Notes
+
+[Things Claude should know when working on this codebase]
+
+---
+
+*This file is automatically created by the Claude Agents Framework.*
+*Edit as needed for your project-specific requirements.*
+""")
+    return True
+
+def merge_global_hooks():
+    """
+    Merge global hooks into project-local settings if local settings exist.
+    This ensures hooks work even when project has custom permissions.
+
+    Returns:
+        bool: True if hooks were merged, False otherwise
+    """
+    import json
+
+    local_settings = CLAUDE_DIR / "settings.local.json"
+
+    # Skip if no local settings file
+    if not local_settings.exists():
+        return False
+
+    # Load global settings
+    global_settings = Path.home() / ".claude" / "settings.json"
+    if not global_settings.exists():
+        return False
+
+    try:
+        with open(global_settings) as f:
+            global_config = json.load(f)
+
+        with open(local_settings) as f:
+            local_config = json.load(f)
+
+        # Check if hooks already merged
+        if "hooks" in local_config and local_config.get("hooks"):
+            return False  # Already has hooks, don't overwrite
+
+        # Merge permissions from global (if not set locally)
+        if "permissions" not in local_config:
+            global_permissions = global_config.get("permissions", {})
+            if global_permissions:
+                local_config["permissions"] = global_permissions
+
+        # Merge hooks from global
+        global_hooks = global_config.get("hooks", {})
+        if not global_hooks:
+            return False
+
+        local_config["hooks"] = global_hooks
+
+        # Write merged settings
+        with open(local_settings, "w") as f:
+            json.dump(local_config, f, indent=2)
+            f.write("\n")
+
+        return True
+    except Exception:
+        return False
 
 def get_node_path():
     """
@@ -281,6 +366,8 @@ def setup_launchd_agents():
         <string>{redis_url}</string>
         <key>OPENAI_API_KEY</key>
         <string>{openai_key}</string>
+        <key>ENABLE_VECTOR_RAG</key>
+        <string>true</string>
         <key>PATH</key>
         <string>{full_path}</string>
         <key>CLAUDE_PROJECT_DIR</key>
@@ -323,6 +410,8 @@ def setup_launchd_agents():
         <string>{redis_url}</string>
         <key>OPENAI_API_KEY</key>
         <string>{openai_key}</string>
+        <key>ENABLE_VECTOR_RAG</key>
+        <string>true</string>
         <key>PATH</key>
         <string>{full_path}</string>
         <key>CLAUDE_PROJECT_DIR</key>
@@ -510,9 +599,17 @@ def main():
         if ensure_notes_md():
             actions.append("Created NOTES.md")
 
-        # 4. Setup per-project launchd agents (if Vector RAG credentials exist)
+        # 4. Create CLAUDE.md
+        if ensure_claude_md():
+            actions.append("Created CLAUDE.md")
+
+        # 5. Setup per-project launchd agents (if Vector RAG credentials exist)
         if setup_launchd_agents():
             actions.append("Setup launchd agents")
+
+        # 5. Merge global hooks into local settings (if local settings exist)
+        if merge_global_hooks():
+            actions.append("Merged global hooks into local settings")
 
         # Mark setup complete
         mark_setup_complete()

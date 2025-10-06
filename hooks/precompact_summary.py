@@ -5,8 +5,8 @@ PreCompact hook: produce a compact, durable summary before the conversation is c
 
 Inputs: JSON on stdin (may contain recent messages or assistant text).
 Outputs:
-- compaction-summary.json (machine-readable)
-- COMPACTION.md (human-readable)
+- .claude/logs/compaction-summary.json (machine-readable)
+- .claude/logs/COMPACTION.md (human-readable)
 - (optional) gzip older logs in ./logs
 
 Exit codes:
@@ -24,14 +24,15 @@ LOGS_DIR_STR = os.environ.get("LOGS_DIR", os.path.expanduser("~/claude-hooks/log
 WSI_PATH = Path(os.environ.get("WSI_PATH", str(Path(LOGS_DIR_STR) / "wsi.json")))
 
 # Auto-create logs directory
-Path(LOGS_DIR_STR).mkdir(parents=True, exist_ok=True)
+CLAUDE_LOGS_DIR = Path(LOGS_DIR_STR)
+CLAUDE_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Use official CLAUDE_PROJECT_DIR env var
 PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
-NOTES_PATH   = PROJECT_ROOT / "NOTES.md"
-SUMMARY_JSON = PROJECT_ROOT / "compaction-summary.json"
-SUMMARY_MD   = PROJECT_ROOT / "COMPACTION.md"
-LOGS_DIR     = PROJECT_ROOT / "logs"  # Old logs in project (different from LOGS_DIR_STR)
+NOTES_PATH   = CLAUDE_LOGS_DIR / "NOTES.md"
+SUMMARY_JSON = CLAUDE_LOGS_DIR / "compaction-summary.json"
+SUMMARY_MD   = CLAUDE_LOGS_DIR / "COMPACTION.md"
+LOGS_DIR     = PROJECT_ROOT / "logs"  # Old logs in project (different from CLAUDE_LOGS_DIR)
 MAX_DIGESTS  = int(os.environ.get("COMPACT_MAX_DIGESTS", "8"))
 GZIP_OLD_LOGS = os.environ.get("COMPACT_GZIP_OLD_LOGS", "0") == "1"
 

@@ -1282,6 +1282,35 @@ def main():
                 f.write(f"   📌 Ingest job queued: {os.path.basename(job_path)}\n")
             f.write(f"   ⏩ Queue processing deferred to launchd agent (prevents Stop hook timeout)\n")
 
+        # Call PM decision hook if enabled
+        # This allows GPT-5 to make strategic decisions when agent encounters decision points
+        enable_pm = os.environ.get("ENABLE_PM_AGENT", "false").lower() == "true"
+        if enable_pm and text:
+            with open(debug_log, "a") as f:
+                f.write(f"🤖 PM Agent enabled - checking for decision points...\n")
+            try:
+                pm_hook_path = os.path.join(os.path.dirname(__file__), "pm_decision_hook.py")
+                # Pass last message text to PM hook (don't block on it - run async)
+                # Note: We're not waiting for result to keep Stop hook fast
+                subprocess.Popen(
+                    [sys.executable, pm_hook_path, "--async"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                # Feed decision context via stdin
+                input_data = json.dumps({
+                    "last_message": text[-1000:],  # Last 1000 chars
+                    "digest": digest,
+                    "debug_log": debug_log
+                })
+                with open(debug_log, "a") as f:
+                    f.write(f"   ✅ PM hook spawned (async)\n")
+            except Exception as e:
+                with open(debug_log, "a") as f:
+                    f.write(f"   ⚠️  PM hook failed: {e}\n")
+
         # Show user-visible warning if credentials are missing (check via env var instead)
         enable_rag = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"
         if not enable_rag:

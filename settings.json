@@ -1,4 +1,25 @@
 {
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Grep",
+      "Glob",
+      "Task",
+      "NotebookEdit",
+      "TodoWrite",
+      "SlashCommand",
+      "KillShell",
+      "BashOutput",
+      "ExitPlanMode",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -95,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env WSI_PATH=\"$CLAUDE_PROJECT_DIR/.claude/logs/wsi.json\" LOGS_DIR=\"$CLAUDE_PROJECT_DIR/.claude/logs\" python3 \"$HOME/.claude/hooks/stop_digest.py\""
+            "command": "env WSI_PATH=\"$CLAUDE_PROJECT_DIR/.claude/logs/wsi.json\" LOGS_DIR=\"$CLAUDE_PROJECT_DIR/.claude/logs\" ENABLE_VECTOR_RAG=\"true\" python3 \"$HOME/.claude/hooks/stop_digest.py\""
           }
         ]
       }
