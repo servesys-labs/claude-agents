@@ -1,62 +1,150 @@
 # Vector Bridge MCP Server
 
-Global vector memory service for Claude Code across all projects.
+Global vector memory service for Claude Code with **intelligent learning and feedback**.
 
-## Features
+## ✨ Key Features
 
-- **Multi-tenant**: Projects are isolated by `project_root` path
+### Core Capabilities
+- **Multi-tenant**: Projects isolated by `project_root` path
 - **Automatic chunking**: Splits text into 500-800 token chunks with overlap
-- **OpenAI embeddings**: Uses `text-embedding-3-small` (1536 dimensions)
-- **Postgres + pgvector**: Scalable vector storage with cosine similarity search
-- **MCP tools**: `memory_ingest`, `memory_search`, `memory_projects`
+- **OpenAI embeddings**: `text-embedding-3-small` (1536 dimensions, $0.02/1M tokens)
+- **Postgres + pgvector**: Scalable vector storage with HNSW indexes
+- **Redis cache**: 60-day embedding cache + 5-minute query cache (14.6x speedup)
+
+### 🚀 Phase 2: Hybrid Search (v1.1.0)
+- **Multi-signal ranking**: Vector similarity (60%) + BM25 text search (30%) + time decay (10%)
+- **Outcome bonus**: +10% for successful solutions, -5% for failures
+- **Conversation summaries**: Automatic ingestion after compaction
+- **Better relevance**: Technical keywords + semantic understanding + recency
+
+### 🎯 Phase 3: Learning System (v1.2.0)
+- **Memory feedback**: `memory_feedback` tool to record helpful/unhelpful memories
+- **Feedback bonus**: +15% ranking boost for consistently helpful memories
+- **Pattern detection**: `detect_patterns` finds recurring solutions across projects
+- **Self-improving**: Rankings improve over time based on actual usefulness
+
+## MCP Tools
+
+### memory_ingest
+Ingest text content into vector store with metadata.
+
+```typescript
+{
+  project_root: "/Users/name/my-project",
+  path: "src/utils/helper.ts",
+  text: "function add(a, b) { return a + b; }",
+  meta: {
+    type: "code",
+    language: "typescript",
+    outcome_status: "success" // optional: success|failure|unknown
+  }
+}
+```
+
+### memory_search
+Hybrid search with vector + BM25 + time decay + feedback bonus.
+
+```typescript
+{
+  project_root: "/Users/name/my-project",
+  query: "how to add two numbers",
+  k: 8,  // max 20
+  global: false,  // true = search across all projects
+  component: "backend",  // optional filter
+  category: "code"  // optional filter
+}
+```
+
+Returns:
+```json
+{
+  "results": [
+    {
+      "path": "src/utils/math.ts",
+      "chunk": "function add(a, b) { return a + b; }",
+      "score": 0.92,
+      "meta": {
+        "chunk_id": 123,  // for feedback
+        "vector_score": 0.85,
+        "bm25_score": 0.45,
+        "time_score": 0.98,
+        "feedback_score": 1.0,  // 100% helpful
+        "outcome_bonus": 0.10
+      }
+    }
+  ]
+}
+```
+
+### memory_feedback (NEW in v1.2.0)
+Record whether a memory was helpful.
+
+```typescript
+{
+  chunk_id: 123,  // from search result meta
+  helpful: true,
+  context: "Solved my addition function bug"  // optional
+}
+```
+
+### memory_projects
+List all indexed projects with stats.
+
+```typescript
+{}
+```
+
+### solution_search
+Search for solution fixpacks matching error messages.
+
+```typescript
+{
+  error_message: "ENOTFOUND redis.railway.internal",
+  category: "deploy",  // optional
+  limit: 5
+}
+```
+
+### solution_apply
+Record success/failure of applied solutions.
+
+```typescript
+{
+  solution_id: 16,
+  success: true
+}
+```
 
 ## Setup
 
-### 1. Create Railway Postgres Service
+### Quick Start (Railway)
 
 ```bash
-# In Railway dashboard:
-# 1. New Project → "ai-memory"
-# 2. Add Postgres service
-# 3. Copy DATABASE_URL
-```
-
-### 2. Set Environment Variables
-
-Add to `~/.zshrc` or `~/.bashrc`:
-
-```bash
-export DATABASE_URL_MEMORY="postgresql://user:pass@host:port/ai_memory"
-export OPENAI_API_KEY="sk-..."
-```
-
-### 3. Install Dependencies
-
-```bash
+# 1. Install dependencies
 cd ~/.claude/mcp-servers/vector-bridge
 npm install
 npm run build
-```
 
-### 4. Run Migration
+# 2. Set environment variables
+export DATABASE_URL_MEMORY="postgresql://user:pass@host:port/railway"
+export REDIS_URL="redis://default:pass@host:port"  # optional, for caching
+export OPENAI_API_KEY="sk-proj-..."
 
-```bash
-# Connect to Railway Postgres and run:
-psql $DATABASE_URL_MEMORY < migrations/001_init.sql
-```
+# 3. Run all migrations
+for f in migrations/*.sql; do
+  psql $DATABASE_URL_MEMORY < $f
+done
 
-### 5. Register in Claude Code
-
-Add to `~/.claude/settings.json`:
-
-```json
+# 4. Configure Claude Code
+# Add to ~/.claude/settings.json:
 {
   "mcpServers": {
     "vector-bridge": {
       "command": "node",
-      "args": ["/Users/agentsy/.claude/mcp-servers/vector-bridge/dist/index.js"],
+      "args": ["/Users/YOU/.claude/mcp-servers/vector-bridge/dist/index.js"],
       "env": {
         "DATABASE_URL": "${DATABASE_URL_MEMORY}",
+        "REDIS_URL": "${REDIS_URL}",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}"
       }
     }
@@ -64,63 +152,227 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-## MCP Tools
+### Migrations
 
-### memory_ingest
-
-Ingest text content into vector store.
-
-```typescript
-{
-  project_root: "/Users/name/my-project",
-  path: "src/utils/helper.ts",
-  text: "function add(a, b) { return a + b; }",
-  meta: { type: "code", language: "typescript" }
-}
-```
-
-### memory_search
-
-Search for similar chunks.
-
-```typescript
-{
-  project_root: "/Users/name/my-project",
-  query: "how to add two numbers",
-  k: 8,
-  global: false
-}
-```
-
-### memory_projects
-
-List all indexed projects.
-
-```typescript
-{}
-```
+Run in order:
+1. `001_init.sql` - Base schema (projects, documents, search functions)
+2. `002_add_metadata.sql` - Categorization (component, category, tags)
+3. `003_solution_memory.sql` - Solution fixpacks
+4. `004_hnsw_indexes.sql` - Performance (HNSW indexes)
+5. `005_hybrid_search.sql` - BM25 + time decay
+6. `006_feedback_system.sql` - Feedback + pattern detection
 
 ## Schema
 
 ```sql
+-- Core tables
 projects(id, root_path, label, created_at, updated_at)
-documents(id, project_id, path, chunk, embedding, meta, content_sha, updated_at)
+documents(id, project_id, path, chunk, embedding, component, category, tags, meta, content_sha, chunk_tsv, updated_at)
+
+-- Learning system (v1.2.0)
+memory_feedback(id, chunk_id, helpful, context, created_at)
+
+-- Solution memory
+solutions(id, title, description, category, signatures, steps, checks, success_rate, ...)
+solution_applications(id, solution_id, success, applied_at)
 ```
 
 ## Hook Integration
 
-The `stop_digest.py` hook automatically ingests DIGEST blocks after each turn.
+### Stop Hook (Automatic Ingestion)
+`stop_digest.py` automatically ingests DIGEST blocks after each session:
+- Extracts decisions, files, contracts, next steps
+- Chunks and embeds content
+- Stores with metadata (agent, task_id, outcome_status)
 
-## Cost
+### PostCompact Hook (Conversation Summaries)
+`conversation_summary_ingest.py` ingests conversation summaries after compaction:
+- Summarizes key decisions and outcomes
+- Infers success/failure status
+- Creates persistent memory across sessions
 
-- Embeddings: ~$0.00002 per 1K tokens (OpenAI text-embedding-3-small)
-- Storage: ~$0.25/GB/month (Railway Postgres)
-- Typical usage: ~$0.10-0.50/month for 10K chunks
+### PreToolUse Hook (Auto Context Injection)
+`memory_context_inject.py` automatically injects relevant memories before Task tool:
+- Searches vector memory for similar work
+- Injects top 2-3 results as compact bullets
+- Guardrails: queue ≤5, context <70%, score ≥25%
 
-## Future: Swap to Pinecone
+## Ranking Algorithm
 
-The `MemoryProvider` interface allows swapping to Pinecone:
+Final score combines multiple signals:
 
-1. Implement `PineconeProvider` class
-2. Set `MEMORY_PROVIDER=pinecone` env var
-3. No changes to MCP tools or hooks
+```
+combined_score =
+  vector_similarity * 0.60 +
+  bm25_rank * 0.30 +
+  time_decay * 0.10 +
+  feedback_ratio * 0.15 +  // Phase 3
+  outcome_bonus            // +10% success, -5% failure
+```
+
+### Vector Similarity (60%)
+Cosine similarity between query embedding and document embedding.
+
+### BM25 Text Search (30%)
+Keyword matching using PostgreSQL full-text search.
+
+### Time Decay (10%)
+Exponential decay with 30-day half-life: `exp(-0.023 * days_old)`
+
+### Feedback Bonus (15%)
+Ratio of helpful feedback: `helpful_count / total_feedback`
+
+### Outcome Bonus
+- Success: +10%
+- Failure: -5%
+- Unknown: 0%
+
+## Performance
+
+### Cache Performance
+- **Embedding cache**: 60-day TTL, ~70% cost savings
+- **Query cache**: 5-minute TTL, 14.6x speedup
+- **Dedupe cache**: 48-hour TTL, prevents duplicate ingestion
+
+### Graceful Degradation
+System continues if Redis unavailable (fallback mode without cache).
+
+## Cost Estimate
+
+**Monthly costs for typical usage (10K chunks, 1K searches):**
+- OpenAI embeddings: $0.10-0.20
+- Railway Postgres: $5-10
+- Railway Redis: $5
+- **Total: ~$10-15/month**
+
+With cache:
+- Embedding cost: -70% (cached hits)
+- Search latency: -93% (14.6x faster)
+
+## Usage Examples
+
+### Basic Workflow
+
+```typescript
+// 1. Ingest code snippet
+await memory_ingest({
+  project_root: "/Users/me/my-app",
+  path: "src/auth.ts",
+  text: "export async function login(email, password) { ... }",
+  meta: {
+    component: "backend",
+    category: "code",
+    outcome_status: "success"
+  }
+});
+
+// 2. Search for similar code
+const results = await memory_search({
+  project_root: "/Users/me/my-app",
+  query: "user authentication with email",
+  k: 5
+});
+
+// 3. Record feedback on helpful result
+await memory_feedback({
+  chunk_id: results.results[0].meta.chunk_id,
+  helpful: true,
+  context: "Solved login bug"
+});
+
+// 4. Future searches will rank this result higher (+15% feedback bonus)
+```
+
+### Cross-Project Patterns
+
+```typescript
+// Find recurring solutions across all projects
+const results = await memory_search({
+  project_root: "/Users/me/project-a",
+  query: "Redis connection Docker",
+  global: true,  // search all projects
+  k: 10
+});
+
+// Detect patterns
+const patterns = await detect_patterns({
+  min_occurrences: 3,
+  category: "decision"
+});
+```
+
+## Development
+
+```bash
+# Install
+npm install
+
+# Build
+npm run build
+
+# Watch mode
+npm run dev
+
+# Test connection
+node dist/index.js
+```
+
+## Architecture
+
+```
+┌─────────────────────┐
+│   Claude Code       │
+│   (MCP Client)      │
+└──────────┬──────────┘
+           │ stdio
+           ▼
+┌─────────────────────┐
+│  Vector Bridge MCP  │
+│  (Node.js server)   │
+├─────────────────────┤
+│ - memory_ingest     │
+│ - memory_search     │
+│ - memory_feedback   │
+│ - detect_patterns   │
+└──────────┬──────────┘
+           │
+    ┌──────┴──────┐
+    ▼             ▼
+┌─────────┐  ┌─────────┐
+│ Postgres│  │  Redis  │
+│ pgvector│  │  Cache  │
+└─────────┘  └─────────┘
+```
+
+## Roadmap
+
+### ✅ Phase 1: Foundation
+- Multi-tenant architecture
+- OpenAI embeddings
+- Basic vector search
+
+### ✅ Phase 2: Hybrid Search (v1.1.0)
+- BM25 text search
+- Time decay
+- Outcome bonus
+- Conversation summaries
+
+### ✅ Phase 3: Learning System (v1.2.0)
+- Memory feedback tool
+- Feedback bonus (+15%)
+- Pattern detection
+- Self-improving rankings
+
+### 🔜 Phase 4: Advanced Features
+- A/B testing framework
+- Temporal reasoning ("what worked last month?")
+- Multi-modal memory (code + diagrams + screenshots)
+- Personalized rankings per user
+
+## Contributing
+
+This is part of the [Claude Agents Framework](https://github.com/servesys-labs/claude-agents).
+
+## License
+
+MIT

@@ -1,7 +1,7 @@
 {
   "name": "vector-bridge-mcp",
-  "version": "1.0.0",
-  "description": "Global vector memory MCP server for Claude Code",
+  "version": "1.2.0",
+  "description": "Global vector memory MCP server with intelligent learning and feedback for Claude Code",
   "type": "module",
   "bin": {
     "vector-bridge": "./dist/index.js"
@@ -16,10 +16,21 @@
     "vector",
     "embeddings",
     "rag",
-    "claude"
+    "claude",
+    "machine-learning",
+    "feedback",
+    "hybrid-search",
+    "bm25",
+    "pgvector"
   ],
-  "author": "",
+  "author": "Claude Agents Framework",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/servesys-labs/claude-agents.git",
+    "directory": "mcp-servers/vector-bridge"
+  },
+  "homepage": "https://github.com/servesys-labs/claude-agents/tree/main/mcp-servers/vector-bridge",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@types/ioredis": "^4.28.10",
