@@ -571,18 +571,9 @@ def main():
             # Silent fail-open (never block, but don't pollute $HOME)
             sys.exit(0)
 
-        # Skip if not in a project directory (no package.json, pyproject.toml, etc.)
-        is_project = any([
-            (PROJECT_ROOT / "package.json").exists(),
-            (PROJECT_ROOT / "pyproject.toml").exists(),
-            (PROJECT_ROOT / "Cargo.toml").exists(),
-            (PROJECT_ROOT / "pom.xml").exists(),
-            (PROJECT_ROOT / "go.mod").exists(),
-            is_git_repo()
-        ])
-
-        if not is_project:
-            sys.exit(0)  # Not a project, skip silently
+        # If user is running Claude Code in a directory, they're coding - always setup
+        # The only exception: $HOME and / are already blocked by is_safe_project_root()
+        # No need to check for package.json, git, etc - if they're using Claude Code, it's a project
 
         # Run setup
         actions = []
