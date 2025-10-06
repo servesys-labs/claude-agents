@@ -86,8 +86,13 @@ export async function extractZipSafely(
         continue;
       }
 
-      // Check for suspicious patterns
-      if (entryName.includes('..') || entryName.includes('~/')) {
+      // Check for suspicious patterns (but allow [...] for Next.js catch-all routes)
+      const hasSuspiciousPattern = (
+        (entryName.includes('..') && !entryName.match(/\[\.\.\.[\w-]+\]/)) || // Allow [...slug]
+        entryName.includes('~/')
+      );
+
+      if (hasSuspiciousPattern) {
         result.errors.push(`SUSPICIOUS_PATH: ${entryName} contains suspicious patterns`);
         continue;
       }
