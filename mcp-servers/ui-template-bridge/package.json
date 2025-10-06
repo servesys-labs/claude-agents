@@ -1,5 +1,5 @@
 {
-  "name": "@agentsy/ui-template-bridge",
+  "name": "ui-template-bridge-mcp",
   "version": "1.0.0",
   "description": "MCP server for UI template discovery, preview, and stamping. Provides AI agents with visual screenshots and metadata for Next.js and React Native templates.",
   "main": "dist/index.js",
