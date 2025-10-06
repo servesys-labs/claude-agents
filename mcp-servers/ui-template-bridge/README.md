@@ -492,6 +492,184 @@ ui-template-bridge/
 - [ ] Deploy to Vercel/Netlify/Railway integration
 - [ ] Component marketplace with MagicUI/shadcn registry
 
+---
+
+## Phase 1: Component Extraction Tools
+
+Phase 1 transforms UI Template Bridge from "template stamping" to "component remixing". Instead of copying entire templates, AI agents can now extract individual components (hero, pricing, features) from multiple templates and compose custom pages.
+
+### 9. `list_components`
+
+List all extractable components from a template.
+
+**Parameters:**
+- `templateId` (required): Template ID to scan
+
+**Example:**
+```typescript
+list_components({ templateId: "ai-saas-template" })
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "components": [
+    {
+      "path": "src/components/sections/hero.tsx",
+      "name": "hero.tsx",
+      "directory": "src/components/sections",
+      "imports": ["framer-motion", "@/components/icons", "@/components/ui/button"]
+    },
+    {
+      "path": "src/components/sections/pricing.tsx",
+      "name": "pricing.tsx",
+      "directory": "src/components/sections",
+      "imports": ["@/components/ui/card", "lucide-react"]
+    }
+  ],
+  "count": 15
+}
+```
+
+### 10. `extract_component`
+
+Extract a component from a template with its dependencies.
+
+**Parameters:**
+- `templateId` (required): Template ID
+- `componentPath` (required): Component path (e.g., `src/components/hero.tsx`)
+- `destination` (required): Destination directory
+- `withDependencies` (optional): Include relative imports (default: `true`)
+- `maxDepth` (optional): Max dependency depth (default: `3`)
+- `overwrite` (optional): Overwrite existing files (default: `false`)
+- `dryRun` (optional): Preview without writing (default: `false`)
+
+**Example:**
+```typescript
+extract_component({
+  templateId: "ai-saas-template",
+  componentPath: "src/components/sections/hero.tsx",
+  destination: "./my-app/components/",
+  withDependencies: true,
+  maxDepth: 3
+})
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "filesWritten": [
+    "./my-app/components/hero.tsx",
+    "./my-app/components/icons.tsx",
+    "./my-app/lib/utils.ts"
+  ],
+  "warnings": [
+    "ALIAS_DETECTED: Found @/ - ensure target has matching tsconfig paths",
+    "ASSET_IMPORTS: Found 2 asset import(s) - manual copy required in Phase 1"
+  ]
+}
+```
+
+**Features:**
+- **Depth-limited dependency tracking**: Follows relative imports up to `maxDepth` levels (default: 3)
+- **Circular dependency detection**: Prevents infinite loops with visited Set
+- **Alias detection**: Warns about `@/` and `~/` imports (requires matching tsconfig)
+- **Asset detection**: Identifies image/CSS imports (Phase 2 will auto-copy)
+- **Dry-run mode**: Preview extraction without writing files
+
+### 11. `compose_page`
+
+Compose a Next.js page from component sections.
+
+**Parameters:**
+- `sitePath` (required): Site root directory
+- `pagePath` (required): Page file path (e.g., `app/page.tsx`)
+- `sections` (required): Array of component sections
+  - `importPath` (required): Import path (e.g., `@/components/hero`)
+  - `componentName` (optional): Component name (auto-detected if omitted)
+  - `props` (optional): Component props as JSON object
+- `overwrite` (optional): Overwrite existing page (default: `false`)
+- `dryRun` (optional): Preview without writing (default: `false`)
+
+**Example:**
+```typescript
+compose_page({
+  sitePath: "./my-app",
+  pagePath: "app/page.tsx",
+  sections: [
+    {
+      importPath: "@/components/hero",
+      props: { title: "DevFlow AI", subtitle: "Automate your workflow" }
+    },
+    {
+      importPath: "@/components/features"
+    },
+    {
+      importPath: "@/components/pricing",
+      componentName: "PricingTable"
+    }
+  ]
+})
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "path": "./my-app/app/page.tsx",
+  "preview": "import Hero from '@/components/hero';\nimport Features from '@/components/features';\n\nexport default function Page() {\n  return (\n    <>\n      <Hero title=\"DevFlow AI\" subtitle=\"Automate your workflow\" />\n      <Features />\n      <PricingTable />\n    </>\n  );\n}"
+}
+```
+
+**Features:**
+- **Auto-detects component names**: Converts `@/components/hero` → `Hero`
+- **Props serialization**: Converts JSON objects to JSX props
+- **Multiple sections**: Compose pages from mixed components
+- **Dry-run mode**: Preview generated JSX without writing
+
+---
+
+### Phase 1 Workflow Example
+
+```typescript
+// 1. Discover available components
+const { components } = await list_components({
+  templateId: "ai-saas-template"
+});
+
+// 2. Extract hero from ai-saas-template
+await extract_component({
+  templateId: "ai-saas-template",
+  componentPath: "src/components/sections/hero.tsx",
+  destination: "./my-app/components/",
+  withDependencies: true
+});
+
+// 3. Extract pricing from different template
+await extract_component({
+  templateId: "startup-template",
+  componentPath: "src/components/pricing.tsx",
+  destination: "./my-app/components/",
+  withDependencies: true
+});
+
+// 4. Compose custom landing page
+await compose_page({
+  sitePath: "./my-app",
+  pagePath: "app/page.tsx",
+  sections: [
+    { importPath: "@/components/hero" },
+    { importPath: "@/components/pricing" }
+  ]
+});
+```
+
+**Result**: Custom landing page with hero from Template A + pricing from Template B, no full template duplication.
+
+---
+
 ## License
 
 MIT
