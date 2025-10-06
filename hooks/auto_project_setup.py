@@ -268,7 +268,7 @@ def setup_launchd_agents():
     <key>StartInterval</key>
     <integer>900</integer>
     <key>RunAtLoad</key>
-    <false/>
+    <true/>
     <key>StandardOutPath</key>
     <string>{CLAUDE_DIR}/logs/launchd.queue.out.log</string>
     <key>StandardErrorPath</key>
