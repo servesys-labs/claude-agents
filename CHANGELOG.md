@@ -1,5 +1,113 @@
 # Changelog
 
+## [1.0.10] - 2025-10-05
+
+### Added
+- **Auto-create CLAUDE.md**: `auto_project_setup.py` now creates a default CLAUDE.md template for new projects
+- **Project-Specific Instructions**: Each new project gets a template CLAUDE.md with sections for overview, development, architecture, and important notes
+
+### Changed
+- **Setup Script**: Updated to create CLAUDE.md alongside NOTES.md, .gitignore, and launchd agents
+
+## [1.0.9] - 2025-10-05
+
+### Changed
+- **Comprehensive Permission Allow List**: Added explicit allow rules for all Claude Code tool types (Bash, Read, Write, Edit, MultiEdit, Grep, Glob, Task, NotebookEdit, TodoWrite, SlashCommand, KillShell, BashOutput, ExitPlanMode, WebFetch, WebSearch)
+- **Settings Format**: Using bare tool names (e.g., `"Bash"`) to allow all commands of that type, following Claude Code schema requirements
+- **Dual Strategy**: Combining `defaultMode: "bypassPermissions"` with explicit allow list for maximum compatibility across CLI and VS Code extension
+
+### Fixed
+- **VS Code Extension Prompts**: Should now work without permission popups by using the correct allow list format that the VS Code UI expects
+
+## [1.0.8] - 2025-10-05
+
+### Fixed
+- **Permission Prompts**: Changed from `"allow": ["*"]` to `"defaultMode": "bypassPermissions"` (correct way to skip all prompts)
+- **Settings Validation**: Fixed permission format to match Claude Code schema requirements
+
+### Changed
+- **Global Settings**: Updated to use `permissions.defaultMode: "bypassPermissions"` for true `--dangerously-skip-permissions` behavior
+- **Local Settings**: vs-claude project now uses `defaultMode: "bypassPermissions"` instead of specific allow rules
+
+## [1.0.7] - 2025-10-05
+
+### Changed
+- **Compaction Files Location**: Moved COMPACTION.md and compaction-summary.json to `.claude/logs/` for consistency
+- **PreCompact Hook**: Updated `precompact_summary.py` to write compaction files to `.claude/logs/` instead of project root
+- **Path Variables**: Renamed `LOGS_DIR_STR` → `CLAUDE_LOGS_DIR` for clarity in precompact_summary.py
+
+### Migration
+- Automatically moved existing compaction files from project root to `.claude/logs/` (vs-claude + global)
+
+## [1.0.6] - 2025-10-05
+
+### Fixed
+- **NOTES.md Path**: Fixed `auto_project_setup.py` to create NOTES.md in `.claude/logs/` instead of project root (no more duplicates)
+- **Vector Ingestion**: Added `ENABLE_VECTOR_RAG="true"` to Stop hook command so vector ingestion works by default
+- **Template Format**: Updated NOTES.md template to match Stop hook format ("living state" header)
+
+### Changed
+- **NOTES_MD Path**: Changed from `PROJECT_ROOT / "NOTES.md"` to `LOGS_DIR / "NOTES.md"`
+- **Stop Hook**: Now injects `ENABLE_VECTOR_RAG` environment variable alongside `WSI_PATH` and `LOGS_DIR`
+
+## [1.0.5] - 2025-10-05
+
+### Added
+- **Allow All Commands**: Added `"permissions": { "allow": ["*"] }` to global settings
+- **Orchestration Mode**: Framework now operates like `--dangerously-skip-permissions` by default
+
+### Changed
+- **Merge Script**: Updated to merge permissions from global settings into local settings
+- **Auto-Setup Hook**: Now merges permissions along with hooks for new projects
+
+## [1.0.4] - 2025-10-05
+
+### Fixed
+- **Auto-Hook Merging**: New `merge_global_hooks()` function automatically merges global hooks into project-local settings
+- **Local Settings Override**: Fixed issue where `.claude/settings.local.json` prevented hooks (Stop, PreToolUse, etc.) from running
+- **DIGEST Capture**: Projects with custom local settings now properly capture DIGESTs and queue for vector ingestion
+
+### Changed
+- **Auto-Setup Hook**: Now automatically merges global hooks into local settings when detected
+- **Merge Script**: Created standalone `merge-local-settings.py` for manual hook merging when needed
+
+## [1.0.3] - 2025-10-05
+
+### Added
+- **Reference Copies**: Launchd plists now copied to `.claude/launchd/` for documentation
+- **Project README**: Auto-generated README.md in `.claude/launchd/` with management commands
+
+### Fixed
+- **Agent Location Clarity**: Clarified that actual agents in `~/Library/LaunchAgents/`, reference copies in project
+
+## [1.0.2] - 2025-10-05
+
+### Fixed
+- **Queue Processor Auto-Start**: Changed `RunAtLoad` from `false` to `true` for queue processor
+- **Persistence**: Both agents now auto-start on login/boot
+
+### Added
+- **Background Items Helper**: Created `identify-background-items.sh` to explain macOS background items
+
+## [1.0.1] - 2025-10-05
+
+### Added
+- **Human-Readable Agent Names**: Launchd agents now include git repo name in label
+- **Project Name Extraction**: New `get_project_name()` function extracts repo name from git remote
+- **List Helper**: Created `list-launchd-agents.sh` to display all agents with project info
+
+### Changed
+- **Agent Naming Format**: `com.claude.agents.{type}.{project-name}.{hash}.plist`
+- Example: `com.claude.agents.queue.vs-claude.2f665867.plist`
+
+## [1.0.0] - 2025-10-05
+
+### Added
+- **Scoped Package**: Initial publish as `@servesys-labs/claude-agents`
+- **Per-Project Launchd Agents**: Automatic background vector ingestion per project
+- **Queue Processor**: Processes `.claude/ingest-queue/*.json` every 15 minutes
+- **Status Updater**: Updates project-claude.md every 5 minutes
+
 ## [1.4.4] - 2025-10-05
 
 ### Fixed

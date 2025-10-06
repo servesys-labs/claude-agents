@@ -8,7 +8,7 @@ Project Status updater:
 """
 import os, sys, json, re, hashlib, time, random
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 
 PROJECT_ROOT = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 CLAUDE_DIR = os.path.join(PROJECT_ROOT, ".claude")
@@ -444,7 +444,8 @@ def _collect_status() -> Dict[str, Any]:
         if len(etas) >= 2:
             break
     if etas:
-        status["milestones"]["eta"] = etas[:2]
+        milestones = cast(Dict[str, Any], status["milestones"])
+        milestones["eta"] = etas[:2]
 
     return status
 
@@ -517,6 +518,18 @@ def update_claude_md() -> Dict[str, Any]:
     before = _read_text(CLAUDE_MD_PATH)
     if not before:
         return {"ok": False, "error": f"CLAUDE.md not found at {CLAUDE_MD_PATH}"}
+
+    # Skip auto-injection if CLAUDE.md was recently modified (manual editing in progress)
+    import time
+    try:
+        mtime = os.path.getmtime(CLAUDE_MD_PATH)
+        age_minutes = (time.time() - mtime) / 60
+        # Skip if modified in last 10 minutes (indicates active manual editing)
+        if age_minutes < 10:
+            return {"ok": True, "updated": False, "skipped": "recently_modified", "status": status}
+    except Exception:
+        pass  # Fail-open if stat check fails
+
     new_text = _insert_or_replace_block(before, block)
     changed = hashlib.sha256(new_text.encode()).hexdigest() != hashlib.sha256(before.encode()).hexdigest()
     if changed:

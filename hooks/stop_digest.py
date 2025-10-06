@@ -1271,20 +1271,20 @@ def main():
         # Enqueue this digest for ingestion (always)
         job_path = enqueue_digest_job(digest, debug_log)
 
-        # Process a few queued jobs quickly (non-blocking)
-        q_summary = process_ingest_queue(max_jobs=3, time_budget_sec=5, debug_log_path=debug_log)
+        # Skip queue processing in Stop hook to avoid timeout
+        # Let the launchd queue processor agent handle all ingestion (every 15 min)
+        # This keeps Stop hook fast (<1s) and prevents cancellation
+        q_summary = {"processed": 0, "succeeded": 0, "failed": 0, "skipped_no_creds": 0}
 
         with open(debug_log, "a") as f:
             f.write(f"✅ Successfully wrote NOTES and refreshed WSI\n")
             if job_path:
                 f.write(f"   📌 Ingest job queued: {os.path.basename(job_path)}\n")
-            f.write(
-                f"   📦 Queue processed: {q_summary.get('processed',0)}; "
-                f"succeeded: {q_summary.get('succeeded',0)}; failed: {q_summary.get('failed',0)}\n"
-            )
+            f.write(f"   ⏩ Queue processing deferred to launchd agent (prevents Stop hook timeout)\n")
 
-        # Show user-visible warning if credentials are missing
-        if q_summary.get('skipped_no_creds', 0) > 0:
+        # Show user-visible warning if credentials are missing (check via env var instead)
+        enable_rag = os.environ.get("ENABLE_VECTOR_RAG", "false").lower() == "true"
+        if not enable_rag:
             print(
                 f"\n⚠️  Vector RAG ingestion skipped ({q_summary['skipped_no_creds']} job(s)) - missing credentials.\n"
                 f"To enable automatic DIGEST ingestion to AI memory:\n"
