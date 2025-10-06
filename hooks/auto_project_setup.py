@@ -179,6 +179,34 @@ Project-specific instructions for Claude Code.
 """)
     return True
 
+def ensure_settings_json():
+    """
+    Copy global settings.json to project if it doesn't exist.
+    This ensures MCP servers (vector-bridge, etc.) are available.
+
+    Returns:
+        bool: True if settings were copied, False otherwise
+    """
+    import shutil
+
+    project_settings = CLAUDE_DIR / "settings.json"
+
+    # Skip if project already has settings.json
+    if project_settings.exists():
+        return False
+
+    # Load global settings
+    global_settings = Path.home() / ".claude" / "settings.json"
+    if not global_settings.exists():
+        return False
+
+    try:
+        # Copy global settings to project
+        shutil.copy2(global_settings, project_settings)
+        return True
+    except Exception:
+        return False
+
 def merge_global_hooks():
     """
     Merge global hooks into project-local settings if local settings exist.
@@ -594,11 +622,15 @@ def main():
         if ensure_claude_md():
             actions.append("Created CLAUDE.md")
 
-        # 5. Setup per-project launchd agents (if Vector RAG credentials exist)
+        # 5. Copy settings.json (for MCP servers)
+        if ensure_settings_json():
+            actions.append("Copied settings.json (MCP servers enabled)")
+
+        # 6. Setup per-project launchd agents (if Vector RAG credentials exist)
         if setup_launchd_agents():
             actions.append("Setup launchd agents")
 
-        # 5. Merge global hooks into local settings (if local settings exist)
+        # 7. Merge global hooks into local settings (if local settings exist)
         if merge_global_hooks():
             actions.append("Merged global hooks into local settings")
 

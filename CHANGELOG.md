@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.5] - 2025-10-05
+
+### Fixed
+- **Auto-setup now copies settings.json**: New projects get MCP servers automatically
+  - Fixes: `mcp__vector-bridge__memory_search` and other MCP tools missing in new projects
+  - Copies `~/.claude/settings.json` to `.claude/settings.json` on first setup
+  - Enables vector memory, Perplexity, GPT-5, GitHub, etc. immediately
+  - Previously: Only created directories, no MCP configuration
+
 ## [1.1.4] - 2025-10-05
 
 ### Added
