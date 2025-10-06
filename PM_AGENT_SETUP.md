@@ -85,9 +85,9 @@ Claude Agent → Decision Point → Stop Hook → PM Hook → GPT-5 MCP → Deci
 1. **Agent stops with question** → Stop hook detects decision point
 2. **Request queued** → `.claude/pm-queue/request-*.json` created
 3. **PM processor runs** (every 10 minutes via launchd)
-4. **GPT-4o decides** → Based on AGENTS.md context
+4. **GPT-4o-mini decides** → Based on AGENTS.md context
 5. **Resume instructions created** → `.claude/logs/pm-resume/*.md`
-6. **You come back** → Read resume file, start new session with decision
+6. **You come back** → Use resume helper to continue development
 
 ### Example
 
@@ -102,14 +102,15 @@ python3 ~/.claude/hooks/pm_queue_processor.py
 # ✅ Processed: apply_migration_and_continue
 # Resume file: .claude/logs/pm-resume/resume-20251005-225619.md
 
-# You:
-cat .claude/logs/pm-resume/resume-20251005-225619.md
-# See: Apply migration, continue Phase 5, monitor context budget
+# Quick resume (recommended):
+bash ~/.claude/hooks/resume_latest.sh
+# ✅ Resume prompt copied to clipboard!
+# Shows: Project path, decision, actions, risks
 
-# Start new session in vs-claude:
-cd ~/yolo/vs-claude
-# Paste actions from resume file or just say:
-# "Continue Phase 5 - apply migration first per PM decision"
+# Start new session in the project:
+cd ~/yolo/vs-claude  # (path shown by resume script)
+# Paste (Cmd+V) - the resume prompt is already in your clipboard!
+# Claude continues autonomously with the PM's decision
 ```
 
 ---
@@ -299,6 +300,9 @@ Monitored via `mcp__openai-bridge__get_usage_stats` tool.
 
 ### Commands
 ```bash
+# Quick resume (copies PM decision to clipboard)
+bash ~/.claude/hooks/resume_latest.sh
+
 # Check launchd status
 launchctl list | grep pm-queue
 
@@ -311,10 +315,10 @@ python3 ~/.claude/hooks/pm_queue_processor.py
 # Check for pending decisions
 ls -la .claude/pm-queue/
 
-# View latest decision
+# View latest decision (detailed)
 cat .claude/logs/pm-decisions.json | jq '.[-1]'
 
-# View latest resume instructions
+# View full resume instructions
 ls -t .claude/logs/pm-resume/ | head -1 | xargs -I {} cat .claude/logs/pm-resume/{}
 ```
 
