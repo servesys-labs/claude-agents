@@ -9,6 +9,7 @@ Creates:
 - .claude/logs/ directory
 - .gitignore entries for .claude/logs/ and .envrc
 - NOTES.md (if doesn't exist)
+- Per-project launchd agents (queue processor, project status updater)
 
 Exit codes:
 - 0: success (silent, fail-open on errors)
@@ -22,6 +23,8 @@ Safety:
 import sys
 import os
 import tempfile
+import subprocess
+import hashlib
 from pathlib import Path
 
 # Get project root
@@ -145,6 +148,176 @@ DIGESTs are automatically appended by the Stop hook when agents complete their w
 """)
     return True
 
+def get_node_path():
+    """
+    Detect Node.js path for launchd agents.
+    Handles nvm installations.
+    """
+    # Try which node first
+    try:
+        result = subprocess.run(["which", "node"], capture_output=True, text=True, timeout=2)
+        if result.returncode == 0 and result.stdout.strip():
+            node_path = result.stdout.strip()
+            if os.path.isfile(node_path):
+                return node_path
+    except Exception:
+        pass
+
+    # Try common nvm paths
+    home = str(Path.home())
+    nvm_base = Path(home) / ".nvm" / "versions" / "node"
+    if nvm_base.exists():
+        for node_dir in nvm_base.iterdir():
+            node_bin = node_dir / "bin" / "node"
+            if node_bin.is_file():
+                return str(node_bin)
+
+    # Fallback
+    return "/usr/local/bin/node"
+
+def get_project_hash():
+    """Generate stable hash for project (for unique launchd labels)."""
+    project_str = str(PROJECT_ROOT)
+    return hashlib.sha256(project_str.encode()).hexdigest()[:8]
+
+def setup_launchd_agents():
+    """
+    Create per-project launchd agents for:
+    1. Queue processor (every 15 min)
+    2. Project status updater (every 5 min)
+
+    Returns:
+        bool: True if agents were created, False otherwise
+    """
+    # Only create launchd agents if Vector RAG credentials exist
+    db_url = os.environ.get("DATABASE_URL_MEMORY")
+    redis_url = os.environ.get("REDIS_URL")
+    openai_key = os.environ.get("OPENAI_API_KEY")
+
+    if not (db_url and redis_url and openai_key):
+        return False  # Skip if credentials not configured
+
+    # macOS only
+    if os.uname().sysname != "Darwin":
+        return False
+
+    launchd_dir = Path.home() / "Library" / "LaunchAgents"
+    launchd_dir.mkdir(parents=True, exist_ok=True)
+
+    project_hash = get_project_hash()
+    hooks_dir = Path.home() / ".claude" / "hooks"
+    node_path = get_node_path()
+    node_dir = str(Path(node_path).parent)
+    full_path = f"/usr/local/bin:/usr/bin:/bin:{node_dir}"
+
+    # Agent 1: Queue Processor (every 15 min)
+    queue_label = f"com.claude.agents.queue.{project_hash}"
+    queue_plist = launchd_dir / f"{queue_label}.plist"
+
+    queue_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{queue_label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{hooks_dir}/stop_digest.py</string>
+        <string>--process-queue</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>900</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>{CLAUDE_DIR}/logs/launchd.queue.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>{CLAUDE_DIR}/logs/launchd.queue.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DATABASE_URL_MEMORY</key>
+        <string>{db_url}</string>
+        <key>REDIS_URL</key>
+        <string>{redis_url}</string>
+        <key>OPENAI_API_KEY</key>
+        <string>{openai_key}</string>
+        <key>PATH</key>
+        <string>{full_path}</string>
+        <key>CLAUDE_PROJECT_DIR</key>
+        <string>{PROJECT_ROOT}</string>
+    </dict>
+</dict>
+</plist>
+"""
+
+    # Agent 2: Project Status Updater (every 5 min)
+    status_label = f"com.claude.agents.projectstatus.{project_hash}"
+    status_plist = launchd_dir / f"{status_label}.plist"
+
+    status_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{status_label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{hooks_dir}/project_status.py</string>
+        <string>--update-claude-md</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{CLAUDE_DIR}/logs/launchd.projectstatus.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>{CLAUDE_DIR}/logs/launchd.projectstatus.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DATABASE_URL_MEMORY</key>
+        <string>{db_url}</string>
+        <key>REDIS_URL</key>
+        <string>{redis_url}</string>
+        <key>OPENAI_API_KEY</key>
+        <string>{openai_key}</string>
+        <key>PATH</key>
+        <string>{full_path}</string>
+        <key>CLAUDE_PROJECT_DIR</key>
+        <string>{PROJECT_ROOT}</string>
+    </dict>
+</dict>
+</plist>
+"""
+
+    created = False
+
+    # Write queue processor plist
+    if not queue_plist.exists():
+        queue_plist.write_text(queue_content)
+        # Load the agent
+        try:
+            subprocess.run(["launchctl", "load", str(queue_plist)],
+                         capture_output=True, timeout=5)
+            created = True
+        except Exception:
+            pass
+
+    # Write project status plist
+    if not status_plist.exists():
+        status_plist.write_text(status_content)
+        # Load the agent
+        try:
+            subprocess.run(["launchctl", "load", str(status_plist)],
+                         capture_output=True, timeout=5)
+            created = True
+        except Exception:
+            pass
+
+    return created
+
 def check_vector_rag_credentials():
     """
     Check if Vector RAG credentials are configured.
@@ -235,6 +408,10 @@ def main():
         # 3. Create NOTES.md
         if ensure_notes_md():
             actions.append("Created NOTES.md")
+
+        # 4. Setup per-project launchd agents (if Vector RAG credentials exist)
+        if setup_launchd_agents():
+            actions.append("Setup launchd agents")
 
         # Mark setup complete
         mark_setup_complete()
