@@ -334,9 +334,16 @@ def setup_launchd_agents():
 
     created = False
 
+    # Create project .claude/launchd directory for reference
+    project_launchd_dir = CLAUDE_DIR / "launchd"
+    project_launchd_dir.mkdir(parents=True, exist_ok=True)
+
     # Write queue processor plist
     if not queue_plist.exists():
         queue_plist.write_text(queue_content)
+        # Create reference copy in project
+        project_queue_ref = project_launchd_dir / queue_plist.name
+        project_queue_ref.write_text(queue_content)
         # Load the agent
         try:
             subprocess.run(["launchctl", "load", str(queue_plist)],
@@ -348,6 +355,9 @@ def setup_launchd_agents():
     # Write project status plist
     if not status_plist.exists():
         status_plist.write_text(status_content)
+        # Create reference copy in project
+        project_status_ref = project_launchd_dir / status_plist.name
+        project_status_ref.write_text(status_content)
         # Load the agent
         try:
             subprocess.run(["launchctl", "load", str(status_plist)],
@@ -355,6 +365,57 @@ def setup_launchd_agents():
             created = True
         except Exception:
             pass
+
+    # Create README in launchd directory
+    readme_path = project_launchd_dir / "README.md"
+    if not readme_path.exists():
+        readme_content = f"""# Launchd Agents for this Project
+
+This directory contains **reference copies** of the launchd agents for this project.
+
+## Active Agents
+
+- `{queue_plist.name}` - Queue Processor (runs every 15 min)
+- `{status_plist.name}` - Project Status Updater (runs every 5 min)
+
+## Important
+
+The **actual** plist files that macOS uses are in:
+`~/Library/LaunchAgents/`
+
+The files in this directory are just references for your convenience.
+
+## Managing Agents
+
+**List all agents:**
+```bash
+bash ~/.claude/hooks/list-launchd-agents.sh
+```
+
+**Check agent status:**
+```bash
+launchctl list | grep {project_name}
+```
+
+**View logs:**
+```bash
+tail -f {CLAUDE_DIR}/logs/launchd.queue.out.log
+tail -f {CLAUDE_DIR}/logs/launchd.projectstatus.out.log
+```
+
+**Unload agents:**
+```bash
+launchctl unload ~/Library/LaunchAgents/{queue_label}.plist
+launchctl unload ~/Library/LaunchAgents/{status_label}.plist
+```
+
+**Reload agents:**
+```bash
+launchctl load ~/Library/LaunchAgents/{queue_label}.plist
+launchctl load ~/Library/LaunchAgents/{status_label}.plist
+```
+"""
+        readme_path.write_text(readme_content)
 
     return created
 
