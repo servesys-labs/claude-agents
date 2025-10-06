@@ -45,14 +45,22 @@ export class EmbeddingService {
       }
     }
 
-    // Cache miss - call OpenAI API
+    // Cache miss - call OpenAI API with timeout
     try {
       const startTime = Date.now();
-      const response = await this.openai.embeddings.create({
+
+      // Timeout wrapper (5 seconds hard cap)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OpenAI embedding timeout (5s)')), 5000)
+      );
+
+      const embeddingPromise = this.openai.embeddings.create({
         model: this.model,
         input: text,
         encoding_format: 'float',
       });
+
+      const response = await Promise.race([embeddingPromise, timeoutPromise]) as any;
 
       const embedding = response.data[0].embedding;
       const latency = Date.now() - startTime;
@@ -132,11 +140,19 @@ export class EmbeddingService {
 
     try {
       const startTime = Date.now();
-      const response = await this.openai.embeddings.create({
+
+      // Timeout wrapper (10 seconds for batch - longer than single)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OpenAI batch embedding timeout (10s)')), 10000)
+      );
+
+      const embeddingPromise = this.openai.embeddings.create({
         model: this.model,
         input: uncachedTexts,
         encoding_format: 'float',
       });
+
+      const response = await Promise.race([embeddingPromise, timeoutPromise]) as any;
 
       const latency = Date.now() - startTime;
 
