@@ -63,6 +63,10 @@
           },
           {
             "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/memory_context_inject.py\""
+          },
+          {
+            "type": "command",
             "command": "env WSI_PATH=\"$CLAUDE_PROJECT_DIR/.claude/logs/wsi.json\" LOGS_DIR=\"$CLAUDE_PROJECT_DIR/.claude/logs\" python3 \"$HOME/.claude/hooks/pretooluse_validate.py\""
           }
         ]
