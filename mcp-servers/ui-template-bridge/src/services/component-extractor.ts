@@ -164,7 +164,8 @@ function extractAssetImports(content: string): string[] {
  * Recursively collect dependencies up to maxDepth
  * @param entries - ZIP entries from template
  * @param entryPath - Starting archive path
- * @param maxDepth - Max recursion depth (0 = no deps, 1 = direct deps only)
+ * @param maxDepth - Max file count to collect (1 = root only, 2 = root + 1 dep, etc.)
+ * @param currentDepth - Current file index (1-based)
  * @param visited - Set of already visited paths (prevents cycles)
  * @param warnings - Warnings array to populate
  */
@@ -172,13 +173,19 @@ function collectDependencies(
   entries: AdmZip.IZipEntry[],
   entryPath: string,
   maxDepth: number,
+  currentDepth: number,
   visited: Set<string>,
   warnings: string[]
 ): Map<string, string> {
   const collected = new Map<string, string>(); // archive path -> content
 
-  if (maxDepth < 0 || visited.has(entryPath)) return collected;
+  // If already visited, don't collect again
+  if (visited.has(entryPath)) return collected;
   visited.add(entryPath);
+
+  // Don't collect if we've exceeded the dependency depth limit
+  // (depth is measured from root: 0 = root, 1 = direct deps, 2 = second-level deps, etc.)
+  if (currentDepth > maxDepth) return collected;
 
   // Find the entry
   const normalized = normalizeArchivePath(entryPath);
@@ -188,8 +195,8 @@ function collectDependencies(
   const content = entry.getData().toString('utf-8');
   collected.set(entry.entryName, content);
 
-  // If maxDepth is 0, don't recurse into dependencies
-  if (maxDepth === 0) return collected;
+  // Don't recurse into dependencies if we've exceeded the depth limit
+  if (currentDepth > maxDepth) return collected;
 
   // Parse imports and recurse
   const specs = parseImportSpecifiers(content);
@@ -218,8 +225,8 @@ function collectDependencies(
     }
 
     if (found) {
-      // Recurse with reduced depth
-      const subDeps = collectDependencies(entries, found.entryName, maxDepth - 1, visited, warnings);
+      // Recurse with incremented depth
+      const subDeps = collectDependencies(entries, found.entryName, maxDepth, currentDepth + 1, visited, warnings);
       for (const [path, cont] of subDeps) {
         if (!collected.has(path)) {
           collected.set(path, cont);
@@ -303,9 +310,10 @@ export async function extractComponent(
   let allFiles: Map<string, string>;
 
   if (withDependencies) {
-    // Use depth-limited recursive collection
+    // Use depth-limited recursive collection (depth 0 = root)
+    // maxDepth semantics: collect files at depth 0 through maxDepth (inclusive)
     const visited = new Set<string>();
-    allFiles = collectDependencies(entries, targetEntry.entryName, maxDepth, visited, result.warnings);
+    allFiles = collectDependencies(entries, targetEntry.entryName, maxDepth, 0, visited, result.warnings);
   } else {
     // Just the primary component
     const primaryContent = targetEntry.getData().toString('utf-8');
