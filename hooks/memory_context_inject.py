@@ -170,16 +170,27 @@ def main():
         sys.exit(0)
 
     # Check guardrails
+    debug = os.environ.get("MEMORY_INJECT_DEBUG", "").lower() == "true"
+
     if os.environ.get("ENABLE_VECTOR_RAG", "").lower() != "true":
+        if debug:
+            print(f"[memory_inject] Skipped: ENABLE_VECTOR_RAG not true", file=sys.stderr)
         sys.exit(0)  # RAG disabled
 
     queue_count = get_queue_status()
-    if queue_count > 0:
+    if queue_count > 5:  # Allow small queues (≤5 items)
+        if debug:
+            print(f"[memory_inject] Skipped: Queue has {queue_count} items (threshold: 5)", file=sys.stderr)
         sys.exit(0)  # Stale data in queue
 
     context_usage = get_context_usage()
     if context_usage > CONTEXT_BUDGET_THRESHOLD:
+        if debug:
+            print(f"[memory_inject] Skipped: Context usage {context_usage:.0%} > {CONTEXT_BUDGET_THRESHOLD:.0%}", file=sys.stderr)
         sys.exit(0)  # Context budget exhausted
+
+    if debug:
+        print(f"[memory_inject] Passed guardrails: queue={queue_count}, context={context_usage:.0%}, agent={subagent_type}", file=sys.stderr)
 
     # Extract query from task prompt
     prompt = tool_input.get("prompt", "")
@@ -190,13 +201,26 @@ def main():
     project_root = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 
     # Search for relevant memories
+    if debug:
+        print(f"[memory_inject] Searching: query='{prompt[:60]}...' project={project_root}", file=sys.stderr)
+
     results = call_memory_search(prompt[:200], project_root, k=MAX_RESULTS)
+
+    if debug:
+        print(f"[memory_inject] Found {len(results)} results", file=sys.stderr)
+        for r in results:
+            print(f"  - score={r.get('score', 0):.2%} path={r.get('path', 'unknown')}", file=sys.stderr)
 
     # Filter by score threshold
     results = [r for r in results if r.get("score", 0) >= SCORE_THRESHOLD]
 
     if not results:
+        if debug:
+            print(f"[memory_inject] Skipped: No results above threshold {SCORE_THRESHOLD:.0%}", file=sys.stderr)
         sys.exit(0)  # No relevant memories
+
+    if debug:
+        print(f"[memory_inject] Injecting {len(results)} relevant memories", file=sys.stderr)
 
     # Format and inject context
     context = format_memory_context(results)
