@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.3] - 2025-10-05
+
+### Changed
+- **PM Agent Instant Processing**: PM decisions now process **immediately** instead of waiting for launchd polling
+  - Hook triggers `pm_queue_processor.py` right after queue file creation
+  - Decision ready in 2-5 seconds (down from up to 10 minutes)
+  - Launchd agent now fallback-only (runs every 10 minutes for failed immediate triggers)
+  - User experience: Nearly instant PM decisions on session end
+
+### Updated
+- **PM_AGENT_SETUP.md**: Reflects immediate processing, launchd now optional
+- **Architecture diagram**: Shows immediate trigger flow
+
 ## [1.1.2] - 2025-10-05
 
 ### Fixed

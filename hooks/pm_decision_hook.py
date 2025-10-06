@@ -343,10 +343,22 @@ def main(
 
     log("🤔 Decision point detected! Queuing for PM agent...")
 
-    # Enqueue request (don't call GPT-5 directly - let queue processor handle it)
+    # Enqueue request and immediately process (don't wait for launchd)
     request_file = enqueue_pm_request(decision_point, last_digest)
     log(f"✅ PM request queued: {os.path.basename(request_file)}")
-    log(f"   Will be processed by pm_queue_processor (launchd agent)")
+
+    # Immediately trigger queue processor (no need to wait for launchd poll)
+    try:
+        processor_path = os.path.join(os.path.dirname(__file__), "pm_queue_processor.py")
+        subprocess.run(
+            [sys.executable, processor_path],
+            timeout=30,
+            capture_output=True,
+            check=False  # Don't fail if processor has issues
+        )
+        log(f"✅ PM processor triggered immediately (decision ready in seconds)")
+    except Exception as e:
+        log(f"⚠️  Failed to trigger processor (will be processed by launchd): {e}")
 
     if log_file:
         log_file.close()

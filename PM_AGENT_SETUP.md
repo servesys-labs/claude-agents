@@ -11,13 +11,21 @@ The PM Agent system enables **autonomous decision-making** when Claude agents en
 ## Architecture
 
 ```
-Claude Agent → Decision Point → Stop Hook → PM Hook → GPT-5 MCP → Decision
-                                                         ↓
-                                                  AGENTS.md (context)
-                                                  pm-decisions.json (history)
-                                                         ↓
-                                                  Resume Instructions
+Claude Agent → Decision Point → Stop Hook → PM Hook → Queue File → PM Processor (immediate) → GPT-5 API → Decision
+                                                                                    ↓
+                                                                             AGENTS.md (context)
+                                                                             pm-decisions.json (history)
+                                                                                    ↓
+                                                                             Resume Instructions (seconds, not minutes)
 ```
+
+**Flow:**
+1. Stop hook detects decision point
+2. PM hook writes queue file to `.claude/pm-queue/`
+3. PM hook **immediately** calls `pm_queue_processor.py` (no waiting!)
+4. Processor calls GPT-5 API (gpt-4o-mini, ~2s response time)
+5. Decision written to `.claude/logs/pm-resume/` within seconds
+6. Resume helpers format decision for next session
 
 ### Components
 
@@ -74,20 +82,24 @@ Claude Agent → Decision Point → Stop Hook → PM Hook → GPT-5 MCP → Deci
    # Add to ~/.zshrc or ~/.bashrc for persistence
    ```
 
-4. **Setup Launchd Agent:**
+4. **Setup Launchd Agent (OPTIONAL - fallback only):**
    ```bash
    cd ~/.claude
    bash hooks/setup_pm_launchd.sh
    ```
+   **Note**: PM processor now triggers **immediately** on decision detection.
+   Launchd is only a fallback if immediate trigger fails.
 
 ### How It Works
 
 1. **Agent stops with question** → Stop hook detects decision point
 2. **Request queued** → `.claude/pm-queue/request-*.json` created
-3. **PM processor runs** (every 10 minutes via launchd)
-4. **GPT-4o-mini decides** → Based on AGENTS.md context
-5. **Resume instructions created** → `.claude/logs/pm-resume/*.md`
+3. **PM processor runs** → **Immediately triggered** (not waiting for launchd!)
+4. **GPT-4o-mini decides** → Based on AGENTS.md context (~2 seconds)
+5. **Resume instructions created** → `.claude/logs/pm-resume/*.md` (ready in seconds)
 6. **You come back** → Use resume helper to continue development
+
+**Speed:** Decision ready in **2-5 seconds** instead of up to 10 minutes!
 
 ### Example
 
