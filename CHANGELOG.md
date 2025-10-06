@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1] - 2025-10-05
+
+### Changed
+- **PM Agent Model**: Switched from GPT-4o to GPT-4o-mini (96% cost reduction)
+  - Cost per decision: $0.0005 (down from $0.031)
+  - 100 decisions: $0.05 (down from $3.10)
+  - Quality: Identical decision-making for tactical PM tasks
+- **Model Override**: Added `PM_MODEL` env var for complex decisions (o3, gpt-4o)
+- **Documentation**: Updated all pricing with October 2025 OpenAI rates
+
+### Added
+- Model selection guide in AGENTS.md and PM_AGENT_SETUP.md
+- Cost tracking examples with actual token usage
+
 ## [1.1.0] - 2025-10-05
 
 ### Added
