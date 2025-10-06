@@ -1,6 +1,16 @@
 # Changelog
 
-## [1.1.5] - 2025-10-05
+## [1.1.7] - 2025-10-06
+
+### Fixed
+- **Vector-bridge OpenAI timeout**: IPSA no longer hangs when OpenAI API is slow
+  - Added 5s timeout to `embed()` calls (single embedding)
+  - Added 10s timeout to `embedBatch()` calls (multiple embeddings)
+  - Fixes: IPSA stuck in "Zigzagging..." for 7+ minutes
+  - Impact: Memory search at kickoff fails fast instead of hanging
+  - Location: `mcp-servers/vector-bridge/src/services/embedding.service.ts`
+
+## [1.1.6] - 2025-10-05
 
 ### Fixed
 - **Auto-setup now copies settings.json**: New projects get MCP servers automatically
