@@ -513,29 +513,13 @@ def _insert_or_replace_block(md_text: str, block_text: str) -> str:
     return block_text + "\n" + cleaned
 
 def update_claude_md() -> Dict[str, Any]:
-    status = _collect_status()
-    block = _render_status_block(status)
-    before = _read_text(CLAUDE_MD_PATH)
-    if not before:
-        return {"ok": False, "error": f"CLAUDE.md not found at {CLAUDE_MD_PATH}"}
+    # Skip auto-injection entirely if CLAUDE.md exists
+    # This prevents the hook from overwriting user's global orchestration config
+    if os.path.exists(CLAUDE_MD_PATH):
+        return {"ok": True, "updated": False, "skipped": "file_exists", "status": {}}
 
-    # Skip auto-injection if CLAUDE.md was recently modified (manual editing in progress)
-    import time
-    try:
-        mtime = os.path.getmtime(CLAUDE_MD_PATH)
-        age_minutes = (time.time() - mtime) / 60
-        # Skip if modified in last 10 minutes (indicates active manual editing)
-        if age_minutes < 10:
-            return {"ok": True, "updated": False, "skipped": "recently_modified", "status": status}
-    except Exception:
-        pass  # Fail-open if stat check fails
-
-    new_text = _insert_or_replace_block(before, block)
-    changed = hashlib.sha256(new_text.encode()).hexdigest() != hashlib.sha256(before.encode()).hexdigest()
-    if changed:
-        with open(CLAUDE_MD_PATH, "w", encoding="utf-8") as f:
-            f.write(new_text)
-    return {"ok": True, "updated": changed, "status": status}
+    # Only create CLAUDE.md if it doesn't exist (handled by auto_project_setup.py)
+    return {"ok": True, "updated": False, "skipped": "not_needed", "status": {}}
 
 def _sanitize_label(s: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9\.-]+", "-", s or "project")
