@@ -85,4 +85,22 @@ export interface MemoryProvider {
    * List all indexed projects with stats
    */
   listProjects(): Promise<ProjectInfo[]>;
+
+  /**
+   * Record feedback on memory helpfulness
+   * @param chunk_id - ID of the memory chunk
+   * @param helpful - Was this memory helpful?
+   * @param context - Optional context about how it was used
+   */
+  recordFeedback(
+    chunk_id: number,
+    helpful: boolean,
+    context?: string | null
+  ): Promise<void>;
+
+  /**
+   * Get top helpful memories across projects
+   * @param limit - Number of results (default: 20)
+   */
+  getTopHelpfulMemories(limit?: number): Promise<MemoryChunk[]>;
 }

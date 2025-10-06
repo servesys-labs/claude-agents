@@ -288,6 +288,7 @@ export class PgVectorProvider implements MemoryProvider {
             tags: row.tags,
             meta: {
               ...row.meta,
+              chunk_id: row.id, // Include for feedback
               project_root: row.root_path,
               repo_name: row.repo_name,
               vector_score: parseFloat(row.vector_score),
@@ -331,6 +332,7 @@ export class PgVectorProvider implements MemoryProvider {
             tags: row.tags,
             meta: {
               ...row.meta,
+              chunk_id: row.id, // Include for feedback
               vector_score: parseFloat(row.vector_score),
               bm25_score: parseFloat(row.bm25_score),
               time_score: parseFloat(row.time_score),
@@ -427,6 +429,42 @@ export class PgVectorProvider implements MemoryProvider {
       root_path: row.root_path,
       label: row.label,
       doc_count: parseInt(row.doc_count, 10),
+    }));
+  }
+
+  /**
+   * Record feedback on memory helpfulness
+   */
+  async recordFeedback(
+    chunk_id: number,
+    helpful: boolean,
+    context?: string | null
+  ): Promise<void> {
+    await this.pool.query(
+      'SELECT record_feedback($1, $2, $3)',
+      [chunk_id, helpful, context || null]
+    );
+  }
+
+  /**
+   * Get top helpful memories across projects
+   */
+  async getTopHelpfulMemories(limit: number = 20): Promise<MemoryChunk[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM get_top_helpful_memories($1)',
+      [limit]
+    );
+
+    return result.rows.map((row) => ({
+      path: `${row.project_root}/${row.path}`,
+      chunk: row.chunk,
+      score: parseFloat(row.helpful_ratio),
+      meta: {
+        chunk_id: row.chunk_id,
+        helpful_count: parseInt(row.helpful_count, 10),
+        helpful_ratio: parseFloat(row.helpful_ratio),
+        project_root: row.project_root,
+      },
     }));
   }
 

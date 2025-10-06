@@ -26,6 +26,10 @@ import {
   memoryProjectsTool,
 } from './tools/memory-projects.tool.js';
 import {
+  memoryFeedbackSchema,
+  memoryFeedbackTool,
+} from './tools/memory-feedback.tool.js';
+import {
   autoSetupSchema,
   autoSetupTool,
   saveCredentialsSchema,
@@ -117,6 +121,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: 'object',
           properties: {},
+        },
+      },
+      {
+        name: 'memory_feedback',
+        description:
+          'Record feedback on memory helpfulness. Used for learning which memories are most valuable and improving future rankings.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            chunk_id: {
+              type: 'number',
+              description: 'ID of the memory chunk (from search results meta.chunk_id)',
+            },
+            helpful: {
+              type: 'boolean',
+              description: 'Was this memory helpful? (true/false)',
+            },
+            context: {
+              type: 'string',
+              description: 'Optional context about how it was used',
+            },
+          },
+          required: ['chunk_id', 'helpful'],
         },
       },
       {
@@ -353,6 +380,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'memory_projects': {
         const validated = memoryProjectsSchema.parse(args);
         const result = await memoryProjectsTool(validated, provider);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+
+      case 'memory_feedback': {
+        const validated = memoryFeedbackSchema.parse(args);
+        const result = await memoryFeedbackTool(validated, provider);
         return {
           content: [{ type: 'text', text: result }],
         };

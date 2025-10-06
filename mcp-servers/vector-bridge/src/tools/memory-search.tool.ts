@@ -39,7 +39,10 @@ export async function memorySearchTool(
         path: r.path,
         chunk: r.chunk.substring(0, 200) + (r.chunk.length > 200 ? '...' : ''),
         score: r.score,
-        meta: r.meta,
+        meta: {
+          ...r.meta,
+          chunk_id: r.meta?.id || r.meta?.chunk_id, // Include chunk_id for feedback
+        },
       })),
       total: result.results.length,
       project_id: result.project_id,
